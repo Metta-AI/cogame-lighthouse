@@ -215,6 +215,24 @@ jobs:
             echo "::error::Fix with: git update-index --chmod=+x tools/build_replay_viewer.sh"
             exit 1; }
 
+      # The design note's §Tests "Viewer smoke" promises these repo-side
+      # checks alongside the bundle build. They cost a second and they catch
+      # the two failures the bundle build cannot: a syntax error in either
+      # viewer script (the wasm builds fine, the page is blank), and a
+      # postMessage bridge that phase-60 check 8c greps for having been
+      # renamed away.
+      - name: Check the viewer scripts parse and keep the coworld bridge
+        run: |
+          set -euo pipefail
+          node --check client/renderer.js
+          node --check replay-viewer/static_replay.js
+          for needle in 'data-replay' 'coworld-replay' 'tell("ready")'; do
+            grep -qF -- "${needle}" replay-viewer/static_replay.js || {
+              echo "::error::replay-viewer/static_replay.js must contain ${needle}"
+              exit 1; }
+          done
+          echo "viewer scripts OK"
+
       - name: Build the static replay viewer bundle
         run: ./tools/build_replay_viewer.sh "$PWD/dist/static-replay-viewer"
 
@@ -227,6 +245,26 @@ jobs:
           wasm_count="$(find "${out}" -name '*.wasm' -size +1c | wc -l | tr -d ' ')"
           if [ "${wasm_count}" -lt 1 ]; then
             echo "::error::no non-empty .wasm module in ${out}"
+            find "${out}" -type f | sed 's/^/  /'
+            exit 1
+          fi
+          # Every file index.html references must be IN the bundle: the
+          # platform serves this directory and nothing else, so a reference
+          # the copy step forgot is a 404 and a blank replay.
+          missing=0
+          for ref in $(grep -oE '(src|href)="[^"]+"' "${out}/index.html" \
+            | sed 's/^[^"]*"//; s/"$//'); do
+            case "${ref}" in
+              http:*|https:*|//*|data:*|'#'*) continue ;;
+            esac
+            if [ ! -s "${out}/${ref#./}" ]; then
+              echo "::error::index.html references ${ref}, which is not in the bundle"
+              missing=1
+            else
+              echo "  referenced and present: ${ref}"
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
             find "${out}" -type f | sed 's/^/  /'
             exit 1
           fi
