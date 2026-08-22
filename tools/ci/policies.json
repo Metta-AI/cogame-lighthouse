@@ -1,0 +1,31 @@
+[
+  {
+    "name": "lighthouse-beacon",
+    "run": "/bin/lighthouse-player",
+    "env": {
+      "PLAYER_PROMPT": "As KEEPER: you are the only one who can see. Spend ticks on words only when the words change what a runner will do - every transmit costs one extra tick of tide. Batch all three runners into one line in the grounded form \"<Alias> <N|S|E|W|hold>\", semicolon separated, plus at most one short reason. Give the NEXT SINGLE STEP, never a route: a blind runner cannot hold a route. Re-issue a runner's step only when it changed, when it bumped, or when water is within two tiles of it; otherwise stay silent and let the standing order run. Send runners at the nearest uncollected key first, and the instant all keys are in, drive everyone at the exit. Keep one line per runner in your notes: alias, last order, whether it obeyed. As RUNNER: you are blind. Obey the keeper's last order for your alias as long as that direction is open in your 3x3 window. If it is blocked, take the open direction closest to the ordered one. With no order, hug the left wall consistently so the keeper can predict you. Never step into water. Keep your last few moves and bumps in your notes so the keeper's corrections make sense."
+    }
+  },
+  {
+    "name": "lighthouse-pilot",
+    "run": "/bin/lighthouse-player",
+    "env": {
+      "PLAYER_PROMPT": "As KEEPER: silence is a resource and so is the tide. Solve the whole team's route first - nearest key per runner, then the exit - then transmit on a fixed rhythm of one message every three ticks, breaking the rhythm only when a runner is one tile from water or one tile from a key. Address runners in the same order every time and use exactly this grammar: \"<Alias>:<N|S|E|W|H>\" joined by spaces, nothing else - a rigid grammar is easier for a blind runner to parse than prose. When a runner has a long straight corridor ahead, say the direction once and do not repeat it; count the corridor's length in your notes and stay silent for that many ticks. As RUNNER: parse the keeper's line for your alias and follow that letter until it is blocked or a new line arrives; a repeated letter means keep going. If blocked, turn to the open direction nearest the ordered one; if you are boxed in, WAIT rather than backtrack - the keeper will re-aim you. Never enter water. Note the last letter you were given and how many ticks you have held it."
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "lighthouse-lantern",
+    "run": "/bin/lighthouse-player",
+    "env": {
+      "PLAYER_SCRIPTED": "lantern"
+    }
+  },
+  {
+    "name": "lighthouse-wallhug",
+    "run": "/bin/lighthouse-player",
+    "env": {
+      "PLAYER_SCRIPTED": "wallhug"
+    }
+  }
+]

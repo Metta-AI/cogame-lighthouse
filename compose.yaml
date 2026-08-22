@@ -1,0 +1,7 @@
+services:
+  lighthouse:
+    image: coworld-lighthouse:latest
+    platform: linux/amd64
+    build:
+      context: .
+      network: host

@@ -1,0 +1,464 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/coworld/main/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "cooperative",
+    "asymmetric-information",
+    "instruction-following",
+    "llm-driven",
+    "turn-based",
+    "four-player",
+    "maze"
+  ],
+  "game": {
+    "name": "lighthouse",
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "description": "Lighthouse: a cooperative maze game of structural information asymmetry for four LLM-piloted cogs. One KEEPER sees the whole 17x11 perfect maze and cannot move; three blind RUNNERS see only the 3x3 window around themselves and must collect three keys and reach the exit before the tide drowns them. The keeper's words are the only bridge from the global view to the local one, and every message costs a tick: there is one monotone CLOCK, the tide is a pure function of it, and a tick on which the keeper transmits advances the clock by 2 instead of 1. Water rises from the bottom row upward and never recedes. A message transmitted on tick t reaches all three runners at the start of tick t+1; runners have no channel at all, not to the keeper and not to each other. The gate at the exit is a single global latch that opens when all three keys are in. Scoring is one team number shared by all four seats: 6 for the keys, 10 per runner out, and up to 6 more for getting everyone out while the clock is still low; higher is better. Seats play under anonymous cog aliases so no seat can meta-game who it is playing with. The game is LLM-driven: the server sends each seat's policy prompt plus its observation to Claude every tick, all four seats in ONE parallel batch, so A POLICY IS JUST A PROMPT - build one by reusing the published player runnable and setting the PLAYER_PROMPT environment variable to your strategy. Two scripted baselines (lantern, the shortest-path keeper, and wallhug, the order-following wall-follower) play any seat that registers as scripted - and every seat when no LLM credentials are available, so episodes always complete.",
+    "owner": "daveey@gmail.com",
+    "runnable": {
+      "type": "game",
+      "image": "{{LIGHTHOUSE_IMAGE}}",
+      "run": [
+        "/bin/lighthouse"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/lighthouse/anthropic_api_key"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
+    },
+    "config_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "description": "One connection token per player slot, indexed by slot.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "players": {
+          "description": "One player display-name object per seat, indexed by slot. Slot 0 is the keeper.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "num_agents": {
+          "description": "Seat count; injected by the commissioner. Lighthouse is a four-player game: one keeper and three runners.",
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 4
+        },
+        "seed": {
+          "description": "Pins the maze, the exit, the runner starts, the key placement and the seat aliases. Omit for a fresh random board per episode.",
+          "type": "integer"
+        },
+        "maxTicks": {
+          "description": "Ticks in the episode (capped by the model-call budget: four calls per tick).",
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 55,
+          "default": 45
+        },
+        "width": {
+          "description": "Board width in tiles. Must be odd.",
+          "type": "integer",
+          "minimum": 9,
+          "maximum": 25,
+          "default": 17
+        },
+        "height": {
+          "description": "Board height in tiles. Must be odd.",
+          "type": "integer",
+          "minimum": 9,
+          "maximum": 15,
+          "default": 11
+        },
+        "tideDelay": {
+          "description": "Clock units before the bottom row floods.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40,
+          "default": 10
+        },
+        "tidePeriod": {
+          "description": "Clock units per flooded row. Lower is a faster tide.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 4
+        },
+        "keyCount": {
+          "description": "Keys that must all be collected before the gate opens.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 3
+        },
+        "episodeTimeoutSeconds": {
+          "description": "Wall-clock the game assumes the platform allows an episode when COWORLD_TIMEOUT_SECONDS is not in its environment; play stops between ticks at 60% of it so results and the replay always land.",
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 6000,
+          "default": 1200
+        },
+        "turnDelayMs": {
+          "description": "Spectator pacing delay between ticks.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000,
+          "default": 250
+        },
+        "model": {
+          "description": "Claude model that drives every seat.",
+          "type": "string",
+          "default": "claude-sonnet-5"
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 2000,
+          "default": 900
+        },
+        "llmTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 300,
+          "default": 18
+        },
+        "player_connect_timeout_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "default": 180
+        }
+      }
+    },
+    "results_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "names",
+        "scores",
+        "roles",
+        "teamScore",
+        "keys",
+        "keyCount",
+        "escaped",
+        "drowned",
+        "messages",
+        "ticks",
+        "maxTicks",
+        "clock",
+        "reason"
+      ],
+      "properties": {
+        "names": {
+          "description": "Policy display names, indexed by slot. Seats play under anonymous cog aliases in-game; results attribute by policy name.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "scores": {
+          "description": "The single cooperative team score, identical for all four seats: 6*(keys/keyCount) + 10*escaped + 6*timeBonus. Higher is better.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 42
+          }
+        },
+        "roles": {
+          "description": "Seat roles by slot: slot 0 is the keeper, slots 1-3 are runners.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "enum": [
+              "keeper",
+              "runner"
+            ]
+          }
+        },
+        "teamScore": {
+          "description": "The team score, once.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 42
+        },
+        "keys": {
+          "description": "Keys collected.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "keyCount": {
+          "description": "Keys the episode placed.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "escaped": {
+          "description": "Runners that reached the open exit.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "drowned": {
+          "description": "Runners the tide took.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "messages": {
+          "description": "Messages the keeper transmitted; each cost the team one extra unit of tide.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "ticks": {
+          "description": "Ticks actually played.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxTicks": {
+          "description": "The episode's tick cap after budget fitting.",
+          "type": "integer",
+          "minimum": 4
+        },
+        "clock": {
+          "description": "The tide clock at the end. Ticks plus one per transmitted message.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "description": "How the episode ended.",
+          "type": "string",
+          "enum": [
+            "complete",
+            "timeup",
+            "deadline"
+          ]
+        }
+      }
+    },
+    "protocols": {
+      "player": {
+        "type": "text",
+        "value": "lighthouse.player.v1 - JSON text frames over the websocket named by COWORLD_PLAYER_WS_URL (already carrying ?slot=N&token=T). A Lighthouse policy is a prompt: the player container's only job is to deliver it; the game server makes every decision by sending that prompt plus the seat's observation to Claude, all active seats in ONE parallel batch per tick. Slot 0 is the KEEPER, slots 1-3 are RUNNERS. game->player frames: {\"type\":\"welcome\",\"protocol\":\"lighthouse.player.v1\",\"slot\":N,\"name\":str,\"role\":\"keeper\"|\"runner\",\"maxTicks\":int} on connect; {\"type\":\"state\",\"slot\":N,\"name\":str,\"role\":str,\"seat\":{\"status\":str,\"keys\":int,\"lastMove\":str,\"blocked\":bool,\"messages\":int},\"tick\":int,\"maxTicks\":int,\"keysCollected\":int,\"keyCount\":int,\"gateOpen\":bool,\"escaped\":int,\"drowned\":int,\"teamScore\":float,\"started\":bool,\"done\":bool,\"reason\":str} after every tick - REDACTED, because hidden information is the whole game: a runner's frame never carries the grid, any coordinates or the tide, and the keeper's frame never carries a runner's notes. Decisions are server-side so nothing is lost; {\"type\":\"final\",\"done\":true,\"scores\":[4],\"roles\":[4],\"names\":[4 aliases],\"keys\":int,\"escaped\":int,\"drowned\":int,\"ticks\":int,\"reason\":str} at episode end, after which the player should exit - the final frame carries the anonymous ALIASES, only results.json carries policy names. player->game frames: {\"type\":\"prompt\",\"prompt\":str,\"scripted\":str} (prompt max 4000 chars; send after connect and again after welcome; the latest frame applies to all later ticks). `scripted` is \"\" for the LLM policy, \"lantern\" for the scripted keeper baseline, \"wallhug\" for the scripted runner baseline, or \"1\"/\"true\"/\"yes\" for whichever of the two the dealt slot needs - a baseline dealt the wrong slot always plays the other one rather than stranding the episode. The published lighthouse-player runnable reads its prompt from the PLAYER_PROMPT environment variable (PLAYER_SCRIPTED for the baselines), so a new policy is `coworld upload-policy` of the same image with --secret-env PLAYER_PROMPT=\"<your strategy>\"."
+      },
+      "global": {
+        "type": "text",
+        "value": "Global spectators connect a websocket to /global and receive the full board snapshot as JSON after every tick: {\"type\":\"state\",\"game\":\"lighthouse\",\"seats\":[{name,role,status,pos,keys,lastMove,blocked,window,notes,messages,scripted,pending} x4],\"grid\":[height strings of width chars],\"exit\":[x,y],\"gateOpen\":bool,\"keysOnFloor\":[[x,y]],\"keysCollected\":int,\"keyCount\":int,\"tick\":int,\"maxTicks\":int,\"clock\":int,\"tideRows\":int,\"waterLine\":int,\"message\":str,\"messageAge\":int,\"messageCost\":int,\"escaped\":int,\"drowned\":int,\"score\":float,\"phase\":\"running\"|\"done\",\"gameDone\":bool,\"reason\":str,\"policyNames\":[...],\"events\":[{kind:start|tick|say|key|escape|drown|end,...}],\"started\":bool,\"done\":bool,\"connected\":[bool]}. Seat 0 is the keeper and has pos null; seats 1-3 are the runners and carry their own 3x3 window. The events array is append-only and carries the complete transcript, including every seat's notes; the viewer re-derives every frame from those events plus config. The browser page at /client/global renders the stage live; the static replay viewer bundle renders replays hosted by the platform as index.html?replay=<url>."
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "Lighthouse is a cooperative maze game about grounded instruction-following across an information asymmetry. One cog - the keeper - sees the whole maze and cannot move. Three blind runners see a 3x3 window and must gather three keys and reach the single exit before the tide, which rises from the bottom and never recedes. The keeper may transmit one short message per tick; it lands at the start of the next tick, and it costs the team an extra unit of tide. Silence is the only way to buy time, so the keeper must say only what changes what a runner will do. Everyone shares one score: keys collected, runners out, and a time bonus for getting all three out with the clock still low. A policy is just a prompt: field one by reusing the published lighthouse-player runnable with PLAYER_PROMPT set to your strategy. With no LLM credentials (or for seats that register scripted) the server plays the lantern and wallhug baselines, so episodes always complete."
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "rules.md",
+          "content": {
+            "type": "text",
+            "value": "# Lighthouse rules\n\n## The board\n\nA `width` x `height` grid, default 17 x 11, both odd. `x` runs 0..16 left to right, `y` runs\n0..10 TOP to BOTTOM (y = 0 is the top). Tiles are wall or floor. Everything is drawn from\n`seed`:\n\n1. Every tile starts as wall; the rooms are the tiles with odd x and odd y.\n2. A randomised depth-first search (recursive backtracker) over the rooms carves a PERFECT\n   maze: exactly one path between any two floor tiles, no loops.\n3. The EXIT is a seed-drawn odd x on row 0, carved to floor. It is the only gap in the outer\n   border.\n4. Three RUNNER STARTS are distinct rooms on the bottom room row (y = height - 2), pairwise at\n   least 4 apart in x.\n5. Three KEYS are placed in dead-end rooms (exactly one open neighbour) that are not a start,\n   not the exit and not adjacent to it, with y <= height - 4, drawn from the ones farthest from\n   the exit and pairwise at least 6 apart by maze distance.\n6. The KEEPER occupies no tile. It is in the lantern room, off board. It cannot move.\n\n## Resolution order\n\nTick t (0-based) resolves in exactly these twelve numbered steps:\n\n1. OBSERVE. Each seat's observation is built from the state as it stands at the START of tick\n   t. Runners that have escaped or drowned are not observed and not queried.\n2. DECIDE. Every active seat's LLM call goes out as ONE parallel batch. Each active runner\n   returns a move; the keeper returns transmit + message. Every seat may return notes.\n3. KEEPER TRANSMIT. If the reply has transmit true and a non-empty message after truncation,\n   the message is recorded and queued for delivery at the start of tick t+1.\n4. RUNNER MOVES, in seat order 1, 2, 3. WAIT = (0, 0), N = (0, -1), S = (0, +1), E = (+1, 0),\n   W = (-1, 0). A target that is out of bounds, a wall, or currently flooded leaves the runner\n   where it was and records blocked: a bump, NOT an illegal reply. Runners may not walk into\n   water; the water has to catch them.\n5. KEY PICKUP, in seat order. A runner standing on an uncollected key takes it.\n6. GATE. When all keys are collected the gate opens, permanently.\n7. EXIT, in seat order. A runner on the exit tile with the gate OPEN escapes. On a shut gate it\n   simply waits there.\n8. CLOCK. clock += 1 + (the keeper transmitted this tick ? 1 : 0).\n9. TIDE. Recomputed from the new clock.\n10. DROWN. Every still-active runner whose tile is now flooded drowns.\n11. TICK RECORD. The post-resolution board is appended to the event log; tick += 1.\n12. END CHECK, in order: all three runners resolved -> complete; clock >= floodClock ->\n    complete; tick >= maxTicks -> timeup; otherwise continue.\n\nRunners do NOT collide: any number may stand on one tile, and two may swap tiles in one step.\n\n## The tide\n\n    tideRows(clock) = clamp((clock - tideDelay) div tidePeriod, 0, height)\n    waterLine       = height - tideRows        # y of the topmost flooded row\n    flooded(x, y)   = y >= waterLine\n    floodClock      = tideDelay + height * tidePeriod\n\nAt the defaults (tideDelay 10, tidePeriod 4, height 11) the bottom row floods at clock 14, the\nrunners' start row at clock 18, the exit row at clock 50, and the whole board at clock 54.\n\n## Scoring\n\n    K = keysCollected                   (0 .. keyCount)\n    E = escapedCount                    (0 .. 3)\n    B = if E == 3: clamp(1 - clock / floodClock, 0, 1) else 0\n\n    teamScore = 6 * (K / keyCount) + 10 * E + 6 * B          # range [0, 42]\n\nThe sign is POSITIVE: higher is better. `results.scores[i]` is the same team score for all four\nseats, keeper included, so a keeper's rank is the mean of the teams it made work. Nothing is\nsubtracted for drowning. The time bonus is charged against the CLOCK, not the tick count, so a\nchatty keeper pays for its words twice.\n\n`results.reason` is one of exactly three values: `complete` (every runner resolved, or the\nwhole board flooded), `timeup` (the tick cap with at least one runner still active), or\n`deadline` (the wall-clock play budget, 60% of episodeTimeoutSeconds, expired first).\n\n## What each seat sees\n\nTHE KEEPER sees, every tick: the whole grid rendered as `height` lines of `width` characters\n(`#` wall, `.` floor, `~` flooded, `K` uncollected key, `E` exit with the gate shut, `O` exit\nwith the gate open, `1`/`2`/`3` a runner); every runner's alias, position, status, last move\nand bump flag, and the keys it carries; the tide rows, the water line, and how many ticks until\nthe next row floods BOTH ways - if it stays silent and if it transmits; the tick, the clock,\nthe key count and the gate; its own notes; and a transcript of its last five transmissions. It\ndoes NOT see any runner's private notes.\n\nEACH RUNNER sees, every tick: its 3 x 3 window (same glyphs, `@` for itself, `#` off grid); the\nkeys it holds, the team's key count and whether the gate is open; the tick and the tick cap;\nits inbox - the keeper's message from last tick, verbatim, or silence; the most recent non-empty\nmessage and its age in ticks, so it is not amnesiac between transmissions; its own notes and\nits own last six moves with their bump flags. It does NOT see the map, its own coordinates, the\nother runners, the clock, the tide, or any other seat's notes. It learns about the water only\nby seeing `~` in its window.\n\n## Replies\n\nKeeper: `{\"transmit\": true, \"message\": \"Sprocket N; Gizmo E; Ratchet hold\", \"notes\": \"...\"}`.\n`transmit` absent is inferred from a non-empty message; an empty or whitespace-only message is\nsilence whatever the flag says. `message` is capped at 160 runes, `notes` at 400.\n\nRunner: `{\"move\": \"N\", \"notes\": \"...\"}`. `move` is one of N, S, E, W, WAIT, case-insensitive,\nwith the aliases NORTH/UP, SOUTH/DOWN, EAST/RIGHT, WEST/LEFT and STAY/HOLD. `notes` is capped\nat 200 runes. Anything else is a parse failure: the seat is retried once with a hint and then\nfalls back to its role's scripted baseline. Every free-text field is truncated on RUNE\nboundaries, never bytes.\n\n## The two baselines\n\nLANTERN (keeper). Breadth-first search from the exit and from every uncollected key over the\nunflooded floor; assign each key to its nearest active runner, greedily, nearest pair first;\neveryone else targets the exit. Order each runner the next step of its shortest path, aimed at\nthe tile it will stand on when the words land - a transmission arrives a tick late, so an order\nfor the tile the runner is on now is always one tile stale. Compose\n`\"<Alias> <N|E|S|W|hold>; ...\"` and transmit on a rhythm of every other tick, breaking it when\na runner bumped, when the water has just come within two tiles of one, or when the gate has\njust opened.\n\nWALLHUG (runner). Blind. If the inbox - or, failing that, a standing order at most three ticks\nold - names this runner's alias followed by a direction, and that direction is open and dry in\nthe window, take it. If the ordered direction is blocked, take the open, unflooded neighbour\nnearest the ordered compass angle, clockwise on a tie. Otherwise follow the left-hand wall:\ntry left of the heading, then the heading, then right, then back. If everything is wall or\nwater, WAIT.\n\nA lantern keeper with three wallhug runners is a competent filler team that a good prompt can\nbeat - which is the point of a baseline.\n"
+          }
+        }
+      ]
+    }
+  },
+  "player": [
+    {
+      "id": "lighthouse-player",
+      "name": "Lighthouse Prompt Player",
+      "type": "player",
+      "description": "The reference Lighthouse policy: delivers its PLAYER_PROMPT (or a default keeper/runner strategy) to the game and spectates until the final frame. The same prompt must work in either role, because the platform may seat it anywhere. Field your own policy by uploading this image with a different PLAYER_PROMPT.",
+      "image": "{{LIGHTHOUSE_IMAGE}}",
+      "run": [
+        "/bin/lighthouse-player"
+      ],
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
+    },
+    {
+      "id": "lighthouse-lantern",
+      "name": "Lighthouse Scripted Lantern",
+      "type": "player",
+      "description": "The scripted KEEPER baseline as a fieldable policy: shortest-path orders for every runner, transmitted on a rhythm that pays the tide cost on purpose. Dealt a runner slot it plays wallhug instead, so it never strands an episode.",
+      "image": "{{LIGHTHOUSE_IMAGE}}",
+      "run": [
+        "/bin/lighthouse-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "lantern"
+      },
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
+    },
+    {
+      "id": "lighthouse-wallhug",
+      "name": "Lighthouse Scripted Wallhug",
+      "type": "player",
+      "description": "The scripted RUNNER baseline as a fieldable policy: obey the keeper's last order for your alias while it is open, otherwise turn to the nearest open direction, otherwise follow the left-hand wall. Dealt the keeper slot it plays lantern instead.",
+      "image": "{{LIGHTHOUSE_IMAGE}}",
+      "run": [
+        "/bin/lighthouse-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "wallhug"
+      },
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
+    }
+  ],
+  "variants": [
+    {
+      "id": "standard",
+      "name": "Standard game",
+      "description": "17 x 11 perfect maze, three keys in far dead ends, a tide that takes one row every four units of clock, 45 ticks.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Player1"
+          },
+          {
+            "name": "Player2"
+          },
+          {
+            "name": "Player3"
+          },
+          {
+            "name": "Player4"
+          }
+        ],
+        "num_agents": 4,
+        "maxTicks": 45,
+        "width": 17,
+        "height": 11,
+        "tideDelay": 10,
+        "tidePeriod": 4,
+        "keyCount": 3,
+        "turnDelayMs": 250,
+        "player_connect_timeout_seconds": 180
+      }
+    },
+    {
+      "id": "spring-tide",
+      "name": "Spring tide",
+      "description": "The same maze and keys against a quarter-faster tide: one row every three units of clock. The keeper's words cost the same, but there is far less water-time to spend on them.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Player1"
+          },
+          {
+            "name": "Player2"
+          },
+          {
+            "name": "Player3"
+          },
+          {
+            "name": "Player4"
+          }
+        ],
+        "num_agents": 4,
+        "maxTicks": 45,
+        "width": 17,
+        "height": 11,
+        "tideDelay": 10,
+        "tidePeriod": 3,
+        "keyCount": 3,
+        "turnDelayMs": 250,
+        "player_connect_timeout_seconds": 180
+      }
+    }
+  ],
+  "certification": {
+    "game_config": {
+      "players": [
+        {
+          "name": "Fresnel"
+        },
+        {
+          "name": "Sprocket"
+        },
+        {
+          "name": "Gizmo"
+        },
+        {
+          "name": "Ratchet"
+        }
+      ],
+      "num_agents": 4,
+      "seed": 11,
+      "maxTicks": 10,
+      "turnDelayMs": 0,
+      "player_connect_timeout_seconds": 180
+    },
+    "players": [
+      {
+        "player_id": "lighthouse-player"
+      },
+      {
+        "player_id": "lighthouse-lantern"
+      },
+      {
+        "player_id": "lighthouse-wallhug"
+      },
+      {
+        "player_id": "lighthouse-wallhug"
+      }
+    ]
+  }
+}
