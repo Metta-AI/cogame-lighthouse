@@ -280,8 +280,11 @@ truncator is bullwhip's `cleanText(text, limit)` (`src/bullwhip/llm.nim:385-390`
 
 - `move` — one of `N`, `S`, `E`, `W`, `WAIT`. Accepted case-insensitively, with surrounding
   whitespace stripped, and with the aliases `NORTH`/`UP`, `SOUTH`/`DOWN`, `EAST`/`RIGHT`,
-  `WEST`/`LEFT`, `STAY`/`HOLD`/`WAIT`. Anything else (`"NE"`, `42`, missing) is a **parse
-  failure** and takes the retry-then-fallback path.
+  `WEST`/`LEFT`, `STAY`/`HOLD`/`H`/`WAIT`. `H` is on the list because champion #2
+  `lighthouse-pilot` is specified with the grammar `"<Alias>:<N|S|E|W|H>"`, and the same
+  `parseMoveToken` reads both a runner's reply and the direction a keeper's message gives a
+  `wallhug` runner: without `H` the pilot keeper's own hold order would not parse. Anything
+  else (`"NE"`, `42`, missing) is a **parse failure** and takes the retry-then-fallback path.
 - `notes` — free text, cap **200 runes**, private, fed back next tick.
 
 `{"type":"prompt","prompt":…}` frames from the player container are capped at **4000 chars**
