@@ -744,10 +744,14 @@ LighthouseRenderer` — **the `coworld-replay` postMessage bridge, including `te
 `tell("ready")` and `tell("error")`, and the 20 s `AbortController` fetch bound, stay exactly as
 they are** (phase-60 check 8c greps for the bridge). From `client/renderer.js` these helpers are
 copied unchanged: `makeNameMap`, `applyNames`, `clampName`, `isBaselineFiller`, `renderFeed`,
-`roundBase`, `escapeHtml`, `ellipsize`, `wrapLines`, `roundRect`, `hexToRgb`/`shade`/`rgba`,
+`roundBase`, `escapeHtml`, `wrapLines`, `roundRect`, `hexToRgb`/`shade`/`rgba`,
 `drawTag`, `drawParchment`, `buildScrub`, `bindFeedToggle`, `makeEffects`, `attachLive`,
 `attachReplay`, `updateEndscreen`'s shell, and the Ink & Print palette
 (`COLORS`/`COLOR_HEX`/`PAPER`/`INK`/`AMBER`/`GHOST`, `PICK_HOLD_MS` 2500, `PICK_FADE_MS` 700).
+`ellipsize` is babel's with exactly one change: it cuts the string by **code point**
+(`Array.from`) rather than by UTF-16 code unit, because babel's `slice(0, -1)` can cut an astral
+rune between its surrogates and *Legible at 360 px* below asks for a rune-safe boundary. The
+keeper's message is arbitrary model text and does reach this plate.
 Only `draw`, `computeLayout`, `describeEvent`, `updateScorebug` and the endscreen columns are
 rewritten.
 

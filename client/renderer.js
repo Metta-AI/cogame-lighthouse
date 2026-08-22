@@ -89,11 +89,19 @@
     });
   }
 
+  // Babel's ellipsize, cutting by code point rather than by UTF-16 code
+  // unit: the subtitle plate carries whatever the keeper transmitted, and
+  // String.slice would happily cut an astral rune (an emoji, say) between
+  // its surrogates and render a replacement box. The design note asks for
+  // a rune-safe boundary here.
   function ellipsize(ctx, text, maxWidth) {
     if (ctx.measureText(text).width <= maxWidth) return text;
-    var cut = text;
-    while (cut.length > 1 && ctx.measureText(cut + "…").width > maxWidth) {
-      cut = cut.slice(0, -1);
+    var runes = Array.from(text);
+    var cut = runes.join("");
+    while (runes.length > 1 &&
+        ctx.measureText(cut + "…").width > maxWidth) {
+      runes.pop();
+      cut = runes.join("");
     }
     return cut + "…";
   }
