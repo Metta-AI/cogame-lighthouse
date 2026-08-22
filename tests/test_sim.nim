@@ -244,6 +244,31 @@ suite "resolution order":
     check sim.done
     check sim.reason == "complete"
 
+    ## The escape leg of the same ordering: step 7 also runs before step 8
+    ## (clock) and steps 9/10 (tide, drown), so a runner that reaches the
+    ## exit on the very tick its row floods gets out instead of drowning.
+    var escaper = handSim(keys = @[(2, 1)], starts = [(1, 1), (3, 1), (5, 1)])
+    escaper.step([mvWait, mvWest, mvWait])
+    check escaper.keysCollected == 1
+    check escaper.gateOpen
+    ## clock 31 now; the tick below takes it to 32, flooding row 1 — the
+    ## row all three runners are standing on.
+    escaper.clock = 31
+    check escaper.waterLine() == 2
+    escaper.step([mvNorth, mvWait, mvWait])
+    check escaper.waterLine() == 1
+    check escaper.status[0] == rsEscaped
+    check escaper.escapedCount == 1
+    check escaper.status[1] == rsDrowned
+    check escaper.status[2] == rsDrowned
+    check escaper.done
+    ## And in that order in the event log.
+    var order: seq[EventKind]
+    for event in escaper.events:
+      if event.tick == 1 and event.kind notin {evTick, evEnd}:
+        order.add(event.kind)
+    check order == @[evEscape, evDrown, evDrown]
+
   test "a resolved seat keeps the scripted flag it played under":
     ## Phase 60 counts scripted fallbacks off the tick events and the final
     ## board state, so a seat that escaped must not have its flag zeroed by
