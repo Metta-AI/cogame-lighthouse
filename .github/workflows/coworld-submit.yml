@@ -43,7 +43,15 @@ concurrency:
 
 env:
   # Kept on the same pin as coworld-release.yml.
-  COWORLD_PKG: "coworld[auth]==0.1.38"
+  COWORLD_PKG: "coworld[auth]==0.1.42"
+  # 0.1.42, not 0.1.38: the server expands an uploaded replay-viewer bundle
+  # asynchronously, and 0.1.38 fires the "upload/complete" call and then POSTs the
+  # manifest immediately, racing the expansion -- the upload dies with HTTP 400
+  # "Coworld replay viewer bundle must be uploaded first". 0.1.42 polls the bundle
+  # to status=ready (up to 600s) before uploading the manifest. Every CLI surface
+  # this workflow uses (build, certify, upload-policy, upload-coworld, secret put,
+  # player use/unset) is byte-identical between the two, and certify still prints
+  # the "Replay liveness: skipped (static replay bundle declared" marker.
 
 jobs:
   submit:
