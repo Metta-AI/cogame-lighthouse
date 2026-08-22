@@ -305,16 +305,33 @@ proc orderedDirection*(message, alias: string): tuple[found: bool, move: Move] =
           discard
     start = lower.find(key, start + 1)
 
+proc clockAtLastMessage(sim: Sim): int =
+  ## The clock as it stood when the last transmission went out — the clock
+  ## recorded on that tick's `evTick`, which is the tide the runners were
+  ## looking at when the words landed. -1 when the keeper has not spoken.
+  ## Read from the event log rather than stored: `messages` carries the
+  ## tick, and the clock advances by 1 or 2 per tick, so the tick alone
+  ## does not give it.
+  if sim.messages.len == 0:
+    return -1
+  let spokenOn = sim.messages[^1][0]
+  for index in countdown(sim.events.high, 0):
+    if sim.events[index].kind == evTick and sim.events[index].tick == spokenOn:
+      return sim.events[index].clock
+  -1
+
 proc lanternTransmits*(sim: Sim, steps: array[Runners, Move]): bool =
   ## The baseline pays the tick cost on purpose, on a rhythm plus three
   ## exceptions.
   if sim.tick mod 2 == 0:
     return true
   let last = if sim.messages.len > 0: sim.messages[^1][1] else: ""
-  var roseSinceLastWord = true
-  if sim.messages.len > 0:
-    roseSinceLastWord = tideRowsAt(sim.config, sim.clock) !=
-      tideRowsAt(sim.config, sim.clock - 2)
+  ## "The tide rose SINCE THE LAST MESSAGE" — measured from the clock that
+  ## message was sent on, not from a fixed two-clock window: the last word
+  ## may be many ticks, and many clock units, older than that.
+  let spokenAt = clockAtLastMessage(sim)
+  let roseSinceLastWord = spokenAt < 0 or
+    tideRowsAt(sim.config, sim.clock) != tideRowsAt(sim.config, spokenAt)
   for index in 0 ..< Runners:
     if sim.status[index] != rsActive:
       continue
