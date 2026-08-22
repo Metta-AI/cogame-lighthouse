@@ -80,6 +80,12 @@ pinned seed reproduces the episode bit-for-bit):
    from the seed subject to pairwise `|Δx| ≥ 4`; retry the draw up to 50 times, then fall back to
    the leftmost, middle and rightmost bottom rooms. Runner 1 → the leftmost of the three drawn,
    runner 2 → the middle, runner 3 → the rightmost.
+   **At the shipped 11 × 9 this draw is degenerate and the starts are the same on every seed:**
+   the bottom room row is `{1, 3, 5, 7, 9}` and `{1, 5, 9}` is the only triple pairwise ≥ 4
+   apart — which is also the fallback — so every episode starts at `(1,7)`, `(5,7)`, `(9,7)`
+   (verified over 13 seeds). That is a consequence of the pinned separation at this width, not a
+   broken draw; the anti-pre-baking argument in §Two name spaces rests on the maze, the exit, the
+   key set and the aliases, all of which do vary per seed. The draw binds again on a wider board.
 5. **Keys.** `keyCount` = **3**. Candidates are the **dead-end rooms** (rooms with exactly one
    open neighbour) that are not a start room, not the exit tile, not adjacent to the exit tile,
    and have `y ≤ height - 4` (= 5 at the default size — keys in the bottom two rows would drown
