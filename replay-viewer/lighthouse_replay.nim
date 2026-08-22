@@ -26,13 +26,15 @@ proc lhLoadReplay*(data: ptr uint8, length: cint): cint
     let replay = parseJson(bytesFromPointer(data, int(length)))
     let recorded = replay["config"]
     var config = defaultGameConfig()
-    config.seed = recorded{"seed"}.getInt(0)
-    config.maxTicks = recorded{"maxTicks"}.getInt(45)
-    config.width = recorded{"width"}.getInt(17)
-    config.height = recorded{"height"}.getInt(11)
-    config.tideDelay = recorded{"tideDelay"}.getInt(10)
-    config.tidePeriod = recorded{"tidePeriod"}.getInt(4)
-    config.keyCount = recorded{"keyCount"}.getInt(3)
+    ## Fallbacks come from `defaultGameConfig()` itself, never a second
+    ## copy of the board constants: a copy goes stale on the next retune.
+    config.seed = recorded{"seed"}.getInt(config.seed)
+    config.maxTicks = recorded{"maxTicks"}.getInt(config.maxTicks)
+    config.width = recorded{"width"}.getInt(config.width)
+    config.height = recorded{"height"}.getInt(config.height)
+    config.tideDelay = recorded{"tideDelay"}.getInt(config.tideDelay)
+    config.tidePeriod = recorded{"tidePeriod"}.getInt(config.tidePeriod)
+    config.keyCount = recorded{"keyCount"}.getInt(config.keyCount)
     config.sampled = true
     for name in replay["names"]:
       config.players.add(PlayerConfig(name: name.getStr()))

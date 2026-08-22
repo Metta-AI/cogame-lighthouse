@@ -117,6 +117,21 @@ suite "replay bytes":
     check node["states"].len == sim.events.len + 1
     check $node["states"][^1] == $sim.boardStateJson()
 
+  test "a replay that omits the board keys re-derives on the shipped board":
+    ## The fallbacks in the wasm entry point are `defaultGameConfig()`'s
+    ## own, not a second copy of the board constants: a copy goes stale the
+    ## moment the board is retuned, and re-derives the replay on a maze the
+    ## episode was never played on.
+    let sim = runeEpisode()
+    var trimmed = parseJson(replayPayload(sim))
+    for key in ["width", "height", "tideDelay", "tidePeriod", "keyCount"]:
+      trimmed["config"].delete(key)
+    var bytes = $trimmed
+    check lhLoadReplay(cast[ptr uint8](bytes[0].addr), cint(bytes.len)) == 1
+    var enriched = newString(lhPayloadLength())
+    copyMem(enriched[0].addr, lhPayloadPointer(), enriched.len)
+    check $parseJson(enriched)["states"][^1] == $sim.boardStateJson()
+
   test "a replay whose recorded maze was edited is rejected":
     let sim = runeEpisode()
     var broken = parseJson(replayPayload(sim))

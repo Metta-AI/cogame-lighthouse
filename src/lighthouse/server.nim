@@ -524,13 +524,16 @@ proc buildRouter(replayMode: bool): Router =
 proc configFromReplay*(payload: JsonNode): GameConfig =
   result = defaultGameConfig()
   let recorded = payload["config"]
-  result.seed = recorded{"seed"}.getInt(0)
-  result.maxTicks = recorded{"maxTicks"}.getInt(45)
-  result.width = recorded{"width"}.getInt(17)
-  result.height = recorded{"height"}.getInt(11)
-  result.tideDelay = recorded{"tideDelay"}.getInt(10)
-  result.tidePeriod = recorded{"tidePeriod"}.getInt(4)
-  result.keyCount = recorded{"keyCount"}.getInt(3)
+  ## Every fallback is the shipped default, read off `defaultGameConfig()`
+  ## rather than repeated here: a second copy of the board constants goes
+  ## stale the moment the board is retuned.
+  result.seed = recorded{"seed"}.getInt(result.seed)
+  result.maxTicks = recorded{"maxTicks"}.getInt(result.maxTicks)
+  result.width = recorded{"width"}.getInt(result.width)
+  result.height = recorded{"height"}.getInt(result.height)
+  result.tideDelay = recorded{"tideDelay"}.getInt(result.tideDelay)
+  result.tidePeriod = recorded{"tidePeriod"}.getInt(result.tidePeriod)
+  result.keyCount = recorded{"keyCount"}.getInt(result.keyCount)
   ## The replay carries the episode's fitted cap; never re-fit it. The
   ## maze, the exit, the starts and the keys are re-derived from the seed
   ## and cross-checked against the recorded ones.
