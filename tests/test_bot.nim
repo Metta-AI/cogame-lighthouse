@@ -9,6 +9,12 @@ import lighthouse/[llm, sim]
 
 const Seeds = [1, 7, 42, 1234]
 
+## Legality costs milliseconds, so it is driven over a wider set than the
+## four tuning fixtures. Seed 21 is a board where the tide reaches a tile
+## that still holds a key — the case the legality assertion below has to
+## catch, and the one it missed while it read `and` instead of `or`.
+const LegalitySeeds = [1, 7, 42, 1234, 3, 5, 11, 13, 21, 55]
+
 proc fixture(seed: int, maxTicks = 45): GameConfig =
   result = defaultGameConfig()
   result.seed = seed
@@ -66,12 +72,16 @@ proc playScripted(config: GameConfig): Tally =
         if moves[index] == orders[index].move:
           inc result.obeyed
       ## No move ever passes through a wall, off the grid, or into water.
+      ## `isWall` is true off the grid, so the three cases the comment
+      ## names are exactly the three this rejects — it has to be `or`:
+      ## `and` would only fire on a tile that is wall AND water, which
+      ## `passable` already refuses, i.e. never.
       let step = delta(moves[index])
       let target = (result.sim.pos[index].x + step.x,
         result.sim.pos[index].y + step.y)
       if moves[index] != mvWait:
-        check not (result.sim.isWall(target[0], target[1]) and
-          result.sim.isFlooded(target[0], target[1]))
+        check not result.sim.isWall(target[0], target[1])
+        check not result.sim.isFlooded(target[0], target[1])
     if spoke:
       inc result.talked
     inc result.ticks
@@ -85,7 +95,7 @@ proc playScripted(config: GameConfig): Tally =
 
 suite "scripted baselines":
   test "lantern and wallhug play whole episodes legally":
-    for seed in Seeds:
+    for seed in LegalitySeeds:
       let config = fixture(seed)
       let started = getMonoTime()
       let tally = playScripted(config)
