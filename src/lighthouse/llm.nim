@@ -168,6 +168,21 @@ proc cleanText*(text: string, limit: int): string =
     return
   result = result.runeSubStr(0, limit - 1) & "…"
 
+proc collapseNewlines*(text: string): string =
+  ## Newlines are COLLAPSED to single spaces, per the keeper reply schema:
+  ## one run of `\n`/`\r` becomes one space, so a CRLF or a blank line does
+  ## not leave two or three spaces in the middle of a subtitle. Spacing the
+  ## model typed itself is left alone.
+  var index = 0
+  while index < text.len:
+    if text[index] in {'\n', '\r'}:
+      result.add(' ')
+      while index < text.len and text[index] in {'\n', '\r'}:
+        inc index
+    else:
+      result.add(text[index])
+      inc index
+
 # ---- Direction vocabulary ---------------------------------------------------
 
 proc parseMoveToken*(text: string): Move =
@@ -665,8 +680,7 @@ proc parseKeeperReply*(payload: JsonNode): Decision =
       "no transmit/message/notes in response")
   result.notes = cleanText(payload{"notes"}.getStr(), MaxKeeperNotes)
   result.message = cleanText(
-    payload{"message"}.getStr().replace("\n", " ").replace("\r", " "),
-    MaxMessageLen)
+    collapseNewlines(payload{"message"}.getStr()), MaxMessageLen)
   let flag = payload{"transmit"}
   var wants = result.message.len > 0
   if not flag.isNil:

@@ -238,11 +238,15 @@ suite "reply parsing":
     let hushed = parseKeeperReply(
       parseJson("""{"transmit":false,"message":"quiet"}"""))
     check not hushed.transmit
-    ## Newlines collapse before the rune-boundary truncation.
+    ## Newlines collapse before the rune-boundary truncation: one run of
+    ## newline characters becomes ONE space, CRLF and blank lines included.
     let folded = parseKeeperReply(
       parseJson("""{"message":"one\ntwo","notes":"n"}"""))
     check folded.message == "one two"
     check folded.notes == "n"
+    let crlf = parseKeeperReply(
+      parseJson("""{"message":"a\r\n\nb\n\nc"}"""))
+    check crlf.message == "a b c"
     expect LighthouseError:
       discard parseKeeperReply(parseJson("""{"order":3}"""))
 
