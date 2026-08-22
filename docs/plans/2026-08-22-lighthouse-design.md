@@ -221,8 +221,10 @@ phase-60 verification, but should be rare: the arithmetic below leaves ~160 s of
 
 - The **whole grid**, rendered as `height` lines of `width` characters, using this glyph set:
   `#` wall · `.` floor · `~` flooded · `K` uncollected key · `E` exit, gate closed ·
-  `O` exit, gate open · `1` `2` `3` a runner, by runner number (a runner glyph overrides the
-  tile under it).
+  `O` exit, gate open · `1` `2` `3` a runner, by runner number. Precedence is runner over exit
+  over wall over water over key over floor: in particular an uncollected key on a **flooded**
+  tile renders `~`, not `K`, because nobody may step onto it — the glyph is the only thing a
+  blind runner has to go on, and the `wallhug` baseline reads legality straight off it.
 - Per runner: alias, `(x, y)`, status, the move it made last tick and whether it was blocked,
   and how many keys it is carrying.
 - Tide: `tideRows`, `waterLine`, and — stated explicitly in the prompt, because it is the whole

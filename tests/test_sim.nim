@@ -484,6 +484,16 @@ suite "views":
     let corner = edge.runnerWindow(0)
     check corner[0] == "###"
     check corner[1][0] == '#'
+    ## Water outranks a key: a key still lying on a flooded tile renders
+    ## `~`, never `K`, in the keeper's map and in a runner's window — the
+    ## glyph is the only legality test a blind runner has.
+    var drowned = handSim(keys = @[(4, 3)], starts = [(3, 2), (6, 1), (7, 1)])
+    drowned.clock = 24
+    check drowned.waterLine() == 3
+    check drowned.isFlooded(4, 3)
+    check drowned.glyphAt(4, 3) == '~'
+    check drowned.keeperView().splitLines()[3][4] == '~'
+    check drowned.runnerWindow(0)[2][2] == '~'
 
   test "pendingSeats is the keeper plus the live runners":
     var sim = handSim(keys = @[(7, 1)])

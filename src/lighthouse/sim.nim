@@ -426,8 +426,10 @@ proc runnerAt(sim: Sim, x, y: int): int =
   -1
 
 proc glyphAt*(sim: Sim, x, y: int): char =
-  ## The keeper's map glyph for one tile: runner over exit over key over
-  ## water over floor over wall.
+  ## The keeper's map glyph for one tile: runner over exit over wall over
+  ## water over key over floor. Water outranks a key deliberately: the
+  ## glyph is the only thing a blind runner has to go on, and a `K` drawn
+  ## over the tide would invite it to step into water it may not enter.
   if not sim.inBounds(x, y):
     return '#'
   let runner = sim.runnerAt(x, y)
@@ -435,12 +437,12 @@ proc glyphAt*(sim: Sim, x, y: int): char =
     return char(ord('0') + runner)
   if (x, y) == sim.exitAt:
     return (if sim.gateOpen: 'O' else: 'E')
-  if (x, y) in sim.keysOnFloor:
-    return 'K'
   if sim.isWall(x, y):
     return '#'
   if sim.isFlooded(x, y):
     return '~'
+  if (x, y) in sim.keysOnFloor:
+    return 'K'
   '.'
 
 proc keeperView*(sim: Sim): string =
