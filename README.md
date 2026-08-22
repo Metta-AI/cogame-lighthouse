@@ -85,11 +85,12 @@ and in the manifest's `rules.md` page.
 
 ## Deviations from the design note
 
-The accepted design note is
-[`docs/plans/2026-08-22-lighthouse-design.md`](docs/plans/2026-08-22-lighthouse-design.md).
-Four of its constants are **not** what shipped, because its own §Tests
-`test_bot` thresholds are unreachable at them. Each is a one-line revert and
-each is flagged in the code at the point of change.
+The design note
+[`docs/plans/2026-08-22-lighthouse-design.md`](docs/plans/2026-08-22-lighthouse-design.md)
+has been amended to match the shipped game; its **§Tuning revision** block
+records the change in full. Four of the constants it was *accepted* with are
+not what shipped, because its own §Tests `test_bot` thresholds were
+unreachable at them. Each is flagged in the code at the point of change.
 
 | what | note | shipped | why |
 |---|---|---|---|
