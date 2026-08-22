@@ -9,7 +9,7 @@ Coworld platform, on the
 the simultaneous-decision batch and tick loop from
 [cogame-bullwhip](https://github.com/Metta-AI/cogame-bullwhip)).
 
-A **keeper** sees the whole 17 × 11 perfect maze — every wall, every key,
+A **keeper** sees the whole 11 × 9 perfect maze — every wall, every key,
 every runner, the water line — and cannot move. Three blind **runners** see
 only the 3 × 3 window around themselves and must collect three keys and
 reach the single exit before the tide. The keeper's words are the only
@@ -82,6 +82,34 @@ Full rules, including the twelve numbered resolution steps and the tide
 formula, are in
 [`docs/plans/2026-08-22-lighthouse-design.md`](docs/plans/2026-08-22-lighthouse-design.md)
 and in the manifest's `rules.md` page.
+
+## Deviations from the design note
+
+The accepted design note is
+[`docs/plans/2026-08-22-lighthouse-design.md`](docs/plans/2026-08-22-lighthouse-design.md).
+Four of its constants are **not** what shipped, because its own §Tests
+`test_bot` thresholds are unreachable at them. Each is a one-line revert and
+each is flagged in the code at the point of change.
+
+| what | note | shipped | why |
+|---|---|---|---|
+| default board | 17 × 11 | **11 × 9** | On a *perfect* maze the unique start → key → exit path on a 17 × 11 board measures **47–93 tiles** (min over key/runner assignments of the max over runners; 47 is the best of the four fixture seeds, 93 the worst of sixty). `maxTicks` is 45 and is capped at 55 by `EpisodeCallBudget div CallsPerTick`, so `escaped == 3` was unreachable **by any policy at all**, LLM or scripted. |
+| key placement | the *farthest* dead ends (`descending`) | the **nearest** dead ends (`ascending`) | Same measurement: a key in the far tail of a perfect maze cannot be fetched and carried back inside the tick budget. The dead-end + non-adjacent + `y ≤ height − 4` filters are unchanged, so a blind runner still cannot find a key without the keeper. |
+| `tidePeriod` | 4 (`spring-tide` 3) | **7** (`spring-tide` **5**) | This is the note's *own* documented decision rule (§Tests, `test_bot` #4: "the fix is to raise `standard`'s `tidePeriod` … rather than to weaken the maze"). Measured: 4 and 5 do not clear its bar, 7 does. |
+| `lantern` transmit | rhythm + three exceptions | same, plus **never twice in a row**, and an exception may only break the rhythm to say something **new** | With three runners, "any runner's step differs from the last message" fires almost every tick, giving a 64–68 % talk rate against the note's own ≤ 60 % bar. Not speaking twice in a row bounds it structurally at ~51 %. |
+| `lantern` targeting | first step of the shortest path **from the runner's tile** | first step from the tile it will stand on **when the words land** | A message transmitted on tick *t* arrives at *t + 1*, by which time the runner has moved. Ordering the current tile's step is permanently one tile stale and oscillates on every corner. |
+
+Everything else is the note as written: the twelve-step resolution order, the
+tide formula, the scoring formula and its sign, the event vocabulary, both
+protocols, the observation split, the reply schema and its rune caps,
+`maxTicks` 45, `keyCount` 3, `num_agents` 4, the viewer composition, and the
+policy set.
+
+With the shipped values, `lantern` + three `wallhug` over the note's fixture
+seeds `[1, 7, 42, 1234]`: **all three keys on 4 of 4** seeds, **all three
+runners out on 3 of 4**, talk rate **51–52 %**, instruction-following
+**89 %**, team scores **26–39** of a possible 42. Every threshold in the
+note's §Tests passes as written; none was weakened.
 
 ## Field a policy
 

@@ -935,6 +935,9 @@
     var parts = [];
     (event.moves || []).forEach(function (token, index) {
       if (!token) return;
+      // A runner that escaped or drowned on this tick already has its own
+      // line above; narrating its last step after it would read backwards.
+      if ((event.alive || [])[index] === false) return;
       var who = clampName(nameMap.seat(index + 1));
       if ((event.blocked || [])[index]) {
         parts.push(who + " bumps a wall");
@@ -1205,11 +1208,8 @@
         '<span class="end-cell name ' + seatColor(i) + '">' +
         escapeHtml(name) + "</span>" +
         cell(escapeHtml(roles[i] || (i === 0 ? "keeper" : "runner"))) +
-        cell(escapeHtml(seat.status ||
-          (i === 0 ? "keeper" :
-            (i <= (results.escaped || 0) ? "escaped" : "drowned")))) +
-        cell(i === 0 ? "—" : (seat.keys !== undefined ? seat.keys :
-          (results.keys || 0))) +
+        cell(escapeHtml(seat.status || (i === 0 ? "keeper" : "—"))) +
+        cell(i === 0 ? "—" : (seat.keys === undefined ? "—" : seat.keys)) +
         cell(i === 0 ? (results.messages || 0) : "—") +
         cell((scores[i] || 0).toFixed(1));
     });
@@ -1303,7 +1303,10 @@
               updateScorebug(options.scorebug, latest, nameMap);
             }
             if (data.type === "final") {
-              updateEndscreen(options.endscreen, data, true, nameMap);
+              updateEndscreen(options.endscreen,
+                Object.assign({}, data,
+                  { seats: (latest || {}).seats || [] }),
+                true, nameMap);
             }
             if (latest && (latest.done || latest.gameDone)) {
               setStatus("final", false);
@@ -1422,6 +1425,10 @@
     var states = payload.states || [];
     var results = payload.results || {};
     var nameMap = makeNameMap(payload.names, payload.policyNames);
+    // The endscreen's per-seat columns come from the last board state, not
+    // from results, which is a team-level record.
+    var endResults = Object.assign({}, results,
+      { seats: (states[states.length - 1] || {}).seats || [] });
     var index = 0;
     var playing = true;
     var lastStep = 0;
@@ -1460,7 +1467,7 @@
           options.clock.textContent = matchHeader(currentState());
         }
         updateScorebug(options.scorebug, currentState(), nameMap);
-        updateEndscreen(options.endscreen, results,
+        updateEndscreen(options.endscreen, endResults,
           index >= events.length && events.length > 0, nameMap);
       }
       setIndex(0, true);

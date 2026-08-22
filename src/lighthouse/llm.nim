@@ -336,7 +336,17 @@ proc lanternTransmits*(sim: Sim, steps: array[Runners, Move]): bool =
 proc lanternAction*(sim: Sim): Decision =
   let steps = lanternSteps(sim)
   result.message = lanternMessage(sim, steps)
-  result.transmit = result.message.len > 0 and lanternTransmits(sim, steps)
+  ## Never twice in a row: a runner needs the tick in between to act on
+  ## what it was told, and a back-to-back pair costs the team two extra
+  ## units of tide for one instruction. This is what bounds the baseline
+  ## at about half the ticks it plays. An exception may only break the
+  ## rhythm to say something NEW — re-sending the standing order verbatim
+  ## tells the runners nothing and still costs a unit of tide.
+  let justSpoke = sim.messages.len > 0 and
+    sim.messages[^1][0] == sim.tick - 1
+  let repeat = sim.messages.len > 0 and sim.messages[^1][1] == result.message
+  result.transmit = result.message.len > 0 and not justSpoke and
+    (sim.tick mod 2 == 0 or (not repeat and lanternTransmits(sim, steps)))
   result.scripted = true
 
 # ---- Scripted baseline: wallhug (runner) ------------------------------------

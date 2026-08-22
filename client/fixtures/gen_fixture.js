@@ -12,31 +12,28 @@ var fs = require("fs");
 var path = require("path");
 
 var GRID = [
-  "#.###############",
-  "#...............#",
-  "#.#######.#####.#",
-  "#.#.#.....#...#.#",
-  "#.#.#.#####.#.#.#",
-  "#.#.#.#.#...#.#.#",
-  "#.#.#.#.#.###.#.#",
-  "#...#.#.#.#.#...#",
-  "#####.#.#.#.#####",
-  "#.....#.........#",
-  "#################"
+  "#########.#",
+  "#.........#",
+  "#.###.###.#",
+  "#.#.#.#...#",
+  "#.#.#.#.###",
+  "#...#.#...#",
+  "#####.###.#",
+  "#.....#...#",
+  "###########"
 ];
 var WIDTH = GRID[0].length, HEIGHT = GRID.length;
-var EXIT = [1, 0];
-var STARTS = [[1, 9], [5, 9], [9, 9]];
-var KEYS = [[3, 3], [7, 5], [11, 7]];
+var EXIT = [9, 0];
+var STARTS = [[1, 7], [5, 7], [9, 7]];
+var KEYS = [[3, 3], [1, 3], [5, 5]];
 var NAMES = ["Fresnel", "Tinker", "Gasket", "Piston"];
 var POLICY_NAMES = ["lighthouse-beacon", "lighthouse-pilot", "Baseline (1)",
   "Baseline (2)"];
 var SCRIPTED = [false, false, true, true];
-// A gentler tide than the standard variant, so one fixture shows the whole
-// arc: keys, the gate, an escape and a drowning.
+// The shipped `standard` settings, on the board seed 11 carves.
 var CONFIG = {
   seed: 11, maxTicks: 45, width: WIDTH, height: HEIGHT,
-  tideDelay: 14, tidePeriod: 16, keyCount: KEYS.length, messageCap: 160,
+  tideDelay: 10, tidePeriod: 7, keyCount: KEYS.length, messageCap: 160,
   sampled: true, grid: GRID, exit: EXIT, starts: STARTS, keys: KEYS
 };
 var FLOOD_CLOCK = CONFIG.tideDelay + HEIGHT * CONFIG.tidePeriod;
@@ -46,9 +43,9 @@ var DELTA = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], WAIT: [0, 0] };
 
 // Keeper notes, one per transmission, so the feed shows a plan forming.
 var KEEPER_NOTES = [
-  "Tinker -> key (3,3), Gasket -> key (7,5), Piston -> key (11,7).",
+  "Tinker -> key (3,3), Gasket -> key (1,3), Piston -> key (5,5).",
   "",
-  "Tinker obeying. Water at row 10; nobody within two yet.",
+  "Tinker obeying. Water at row 8; nobody within two yet.",
   "",
   "Piston is slowest; it has the longest corridor.",
   "",
@@ -298,7 +295,7 @@ while (!state.done) {
     parts.push(NAMES[i + 1] + " " + (steps[i] === "WAIT" ? "hold" : steps[i]));
   }
   var message = parts.join("; ");
-  var spoke = message.length > 0;
+  var spoke = message.length > 0 && tick % 2 === 0;
 
   // The runners obey the order that landed at the start of this tick, or
   // the standing order while it is at most three ticks old, and turn to the

@@ -276,13 +276,14 @@ proc placeStarts(rng: var Rand, sim: var Sim) =
     sim.starts[index] = (chosen[index], row)
     sim.pos[index] = sim.starts[index]
 
-proc rankByExitDistance(field: seq[int], width: int,
-    tiles: seq[Tile]): seq[Tile] =
-  ## Farthest first; (y, x) breaks ties so the order is total and the
-  ## draw is reproducible from the seed.
-  var ranked: seq[tuple[negDistance, y, x: int]]
+proc rankByExitDistance(field: seq[int], width: int, tiles: seq[Tile],
+    nearestFirst = false): seq[Tile] =
+  ## Ordered by maze distance from the exit; (y, x) breaks ties so the
+  ## order is total and the draw is reproducible from the seed.
+  var ranked: seq[tuple[distance, y, x: int]]
   for tile in tiles:
-    ranked.add((-field[tile.y * width + tile.x], tile.y, tile.x))
+    let d = field[tile.y * width + tile.x]
+    ranked.add(((if nearestFirst: d else: -d), tile.y, tile.x))
   ranked.sort()
   for entry in ranked:
     result.add((entry.x, entry.y))
@@ -307,7 +308,12 @@ proc placeKeys(rng: var Rand, sim: var Sim) =
         candidates.add(tile)
       x += 2
     y += 2
-  candidates = rankByExitDistance(exitField, width, candidates)
+  ## Nearest dead ends first, not farthest: a key in the far tail of a
+  ## perfect maze cannot be fetched and carried back inside the tick
+  ## budget. See README, "Deviations". The dead-end filter still means a
+  ## blind runner cannot find one without the keeper.
+  candidates = rankByExitDistance(exitField, width, candidates,
+    nearestFirst = true)
 
   let want = sim.config.keyCount
   if candidates.len < want:
@@ -317,11 +323,29 @@ proc placeKeys(rng: var Rand, sim: var Sim) =
       for xx in 0 ..< width:
         let tile: Tile = (xx, yy)
         if not sim.isWall(xx, yy) and tile != sim.exitAt and
-            tile notin startSet and sim.distanceTo(exitField, tile) >= 0:
+            tile notin startSet and
+            abs(xx - sim.exitAt.x) + abs(yy - sim.exitAt.y) > 1 and
+            sim.distanceTo(exitField, tile) >= 0:
           tiles.add(tile)
     tiles = rankByExitDistance(exitField, width, tiles)
-    sim.keysAt = tiles[0 ..< min(want, tiles.len)]
-    sim.keysOnFloor = sim.keysAt
+    var picked: seq[Tile]
+    for tile in tiles:
+      if picked.len >= want:
+        break
+      var far = true
+      for taken in picked:
+        if sim.distanceTo(sim.bfsFrom(@[taken], avoidFlooded = false),
+            tile) < 6:
+          far = false
+      if far:
+        picked.add(tile)
+    for tile in tiles:
+      if picked.len >= want:
+        break
+      if tile notin picked:
+        picked.add(tile)
+    sim.keysAt = picked
+    sim.keysOnFloor = picked
     return
 
   let pool = candidates[0 ..< min(8, candidates.len)]

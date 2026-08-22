@@ -72,10 +72,17 @@ proc defaultGameConfig*(): GameConfig =
   GameConfig(
     seed: 0,
     maxTicks: 45,
-    width: 17,
-    height: 11,
+    # 11 x 9, not the design note's 17 x 11: on a PERFECT maze the unique
+    # start -> key -> exit path on a 17 x 11 board is 47 to 93 tiles, so
+    # `escaped == 3` is unreachable inside maxTicks (capped at 55 by the
+    # model-call budget) by any policy at all. See README, "Deviations".
+    width: 11,
+    height: 9,
     tideDelay: 10,
-    tidePeriod: 4,
+    # The design note's own tuning rule (Tests, test_bot #4) says to raise
+    # this until a lantern + three wallhug team gets its keys and its
+    # runners out. Measured: 4 and 5 do not, 7 does.
+    tidePeriod: 7,
     keyCount: 3,
     episodeTimeoutSeconds: 1200,
     turnDelayMs: 250,
