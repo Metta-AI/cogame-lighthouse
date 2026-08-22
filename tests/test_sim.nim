@@ -432,6 +432,31 @@ suite "replay":
     check frames[0].events.len == 0
     check frames[^1].events.len == events.len
 
+  test "repeated notes are recorded once, not on every tick":
+    ## The tick event's `notes` field means "changed this tick" — a model
+    ## that echoes the same 400 runes every tick must not write them into
+    ## every frame — and the carried value has to survive re-derivation.
+    var sim = initSim(fixtureConfig(seed = 6, maxTicks = 8))
+    var notes: array[Seats, string]
+    notes[KeeperSeat] = "watch the tide"
+    notes[2] = "corridor east"
+    sim.applyTick(false, "", [mvWait, mvWait, mvWait], notes, noScript())
+    check sim.events[^1].notes[KeeperSeat] == "watch the tide"
+    check sim.events[^1].notes[2] == "corridor east"
+    sim.applyTick(false, "", [mvWait, mvWait, mvWait], notes, noScript())
+    check sim.events[^1].notes[KeeperSeat] == ""
+    check sim.events[^1].notes[2] == ""
+    check sim.notes[KeeperSeat] == "watch the tide"
+    check sim.notes[2] == "corridor east"
+    notes[KeeperSeat] = "the gate is shut"
+    sim.applyTick(false, "", [mvWait, mvWait, mvWait], notes, noScript())
+    check sim.events[^1].notes[KeeperSeat] == "the gate is shut"
+    var events: seq[GameEvent]
+    for event in sim.events:
+      events.add(eventFromJson(event.eventToJson()))
+    let frames = replayMatch(sim.config, events, sim.seededConfigJson())
+    check frames[^1].notes == sim.notes
+
   test "a mutated maze in the recorded config is rejected":
     var sim = initSim(fixtureConfig(seed = 2, maxTicks = 6))
     sim.step([mvWait, mvWait, mvWait])

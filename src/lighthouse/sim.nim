@@ -525,8 +525,15 @@ proc applyTick*(sim: var Sim, spoke: bool, message: string,
         "runner " & $(index + 1) & " has already left the maze")
   let tick = sim.tick
 
+  ## `notes` is carried forward: a reply that omits the field, or repeats
+  ## the notes it sent last tick, leaves the seat's notes as they were and
+  ## records `""` in the tick event. The event field means "changed this
+  ## tick" — that is what the viewer's feed prints and what keeps a model
+  ## that echoes 400 runes of notes every tick out of the replay bytes.
+  var noteChanged: array[Seats, bool]
   for seat in 0 ..< Seats:
-    if notes[seat].len > 0:
+    if notes[seat].len > 0 and notes[seat] != sim.notes[seat]:
+      noteChanged[seat] = true
       sim.notes[seat] = notes[seat]
   ## Only the seats that actually decided this tick report a `scripted`
   ## flag: the server builds the array from `pendingSeats()`, so a runner
@@ -640,7 +647,7 @@ proc applyTick*(sim: var Sim, spoke: bool, message: string,
   record.escaped = sim.escapedCount
   record.drowned = sim.drownedCount
   for seat in 0 ..< Seats:
-    record.notes.add(notes[seat])
+    record.notes.add(if noteChanged[seat]: sim.notes[seat] else: "")
     record.scripted.add(sim.scripted[seat])
   sim.addEvent(record)
   inc sim.tick
