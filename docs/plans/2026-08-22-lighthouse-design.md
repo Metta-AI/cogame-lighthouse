@@ -915,8 +915,16 @@ shading rules named above, the same way babel draws its scene cards and shapes. 
   baselines, whose versions must differ from both champions'.
 - **Kept byte-for-byte from the starter**: `data/arena_floor.png`,
   `data/soldier_{red,blue,green,yellow}_front.png`, `data/font.ttf`, `data/FONT_LICENSE.txt`,
-  `nimby.lock`, `LICENSE`, `.gitignore`. `client/chrome.css` is babel's byte-for-byte apart from
-  the scorebug rules named in §Viewer, which babel does not have.
+  `nimby.lock`, `LICENSE`, `.gitignore`. `client/chrome.css` is babel's byte-for-byte except for
+  four additions, all of them additive and none of them touching babel's own rules: `#scorebug`
+  becomes `repeat(4, 1fr)` for four plates; `.plate-name` takes bullwhip's
+  `min-width: 3.2em; flex: 1 1 auto` (§Viewer, *Legible at 360 px*); bullwhip's
+  `@media (max-width: 640px)` block arrives whole — `.plate-label { display: none }` plus the
+  `.plate-score` size and the `#scorebug` gap/padding that ship with it; and lighthouse adds six
+  classes of its own for the chrome §Viewer describes (`.plate-status`, `.plate-msg`,
+  `.plate.drowned .plate-name`, `.plate.escaped .plate-name`, `.feed-notes`, `.feed-tick`) with a
+  `@media (max-width: 420px)` block that drops the scorebug to two columns so four plates still
+  read on the narrowest embed.
 
 ---
 
