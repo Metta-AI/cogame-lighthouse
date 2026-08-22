@@ -244,6 +244,24 @@ suite "resolution order":
     check sim.done
     check sim.reason == "complete"
 
+  test "a resolved seat keeps the scripted flag it played under":
+    ## Phase 60 counts scripted fallbacks off the tick events and the final
+    ## board state, so a seat that escaped must not have its flag zeroed by
+    ## the ticks it no longer plays: the server only reports flags for
+    ## `pendingSeats()`.
+    var sim = handSim(keys = @[(2, 7)], starts = [(1, 1), (3, 7), (5, 7)])
+    var flags: array[Seats, bool]
+    flags[1] = true
+    sim.applyTick(false, "", [mvWait, mvWest, mvWait], silent(), flags)
+    check sim.gateOpen
+    sim.applyTick(false, "", [mvNorth, mvWait, mvWait], silent(), flags)
+    check sim.status[0] == rsEscaped
+    sim.applyTick(false, "", [mvWait, mvWait, mvWait], silent(), noScript())
+    check sim.scripted[1]
+    check sim.events[^1].kind == evTick
+    check sim.events[^1].scripted[1]
+    check sim.boardStateJson()["seats"][1]["scripted"].getBool()
+
 suite "collisions":
   test "runners share tiles and may swap":
     var sim = handSim(starts = [(2, 5), (4, 5), (7, 7)])

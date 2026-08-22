@@ -528,7 +528,15 @@ proc applyTick*(sim: var Sim, spoke: bool, message: string,
   for seat in 0 ..< Seats:
     if notes[seat].len > 0:
       sim.notes[seat] = notes[seat]
-  sim.scripted = scripted
+  ## Only the seats that actually decided this tick report a `scripted`
+  ## flag: the server builds the array from `pendingSeats()`, so a runner
+  ## that escaped or drowned has a zeroed slot. Overwriting the whole
+  ## array with it would clear the flag of a seat that really did play
+  ## scripted, in every later tick event and in the final board state.
+  sim.scripted[KeeperSeat] = scripted[KeeperSeat]
+  for index in 0 ..< Runners:
+    if wasActive[index]:
+      sim.scripted[index + 1] = scripted[index + 1]
 
   # 3. Keeper transmit.
   let text = message.strip()
@@ -633,7 +641,7 @@ proc applyTick*(sim: var Sim, spoke: bool, message: string,
   record.drowned = sim.drownedCount
   for seat in 0 ..< Seats:
     record.notes.add(notes[seat])
-    record.scripted.add(scripted[seat])
+    record.scripted.add(sim.scripted[seat])
   sim.addEvent(record)
   inc sim.tick
 
