@@ -25,7 +25,7 @@ var GRID = [
 var WIDTH = GRID[0].length, HEIGHT = GRID.length;
 var EXIT = [9, 0];
 var STARTS = [[1, 7], [5, 7], [9, 7]];
-var KEYS = [[3, 3], [1, 3], [5, 5]];
+var KEYS = [[1, 3], [3, 3], [5, 5]];   // (y, x) board order, as sim.nim draws them
 var NAMES = ["Fresnel", "Tinker", "Gasket", "Piston"];
 var POLICY_NAMES = ["lighthouse-beacon", "lighthouse-pilot", "Baseline (1)",
   "Baseline (2)"];

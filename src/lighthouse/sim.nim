@@ -332,23 +332,36 @@ proc placeKeys(rng: var Rand, sim: var Sim) =
           tiles.add(tile)
     tiles = rankByExitDistance(exitField, width, tiles)
     var picked: seq[Tile]
-    for tile in tiles:
-      if picked.len >= want:
-        break
-      var far = true
-      for taken in picked:
-        if sim.distanceTo(sim.bfsFrom(@[taken], avoidFlooded = false),
-            tile) < 6:
-          far = false
-      if far:
-        picked.add(tile)
-    for tile in tiles:
-      if picked.len >= want:
-        break
-      if tile notin picked:
-        picked.add(tile)
-    sim.keysAt = picked
-    sim.keysOnFloor = picked
+    ## Farthest first, pairwise >= 6 apart. If the board is too cramped for
+    ## a 6-apart set, relax the requirement one tile at a time rather than
+    ## topping up with no separation at all: the placement invariant the
+    ## tests assert is "as far apart as this board allows", never "any
+    ## three tiles".
+    var separation = 6
+    while picked.len < want and separation >= 0:
+      for tile in tiles:
+        if picked.len >= want:
+          break
+        if tile in picked:
+          continue
+        var far = true
+        for taken in picked:
+          if sim.distanceTo(sim.bfsFrom(@[taken], avoidFlooded = false),
+              tile) < separation:
+            far = false
+        if far:
+          picked.add(tile)
+      dec separation
+    ## The same stable (y, x) board order the dead-end draw ends on, so the
+    ## viewer and the keeper's map agree however the keys were drawn.
+    var order: seq[tuple[y, x: int]]
+    for tile in picked:
+      order.add((tile.y, tile.x))
+    order.sort()
+    sim.keysAt = @[]
+    for entry in order:
+      sim.keysAt.add((entry.x, entry.y))
+    sim.keysOnFloor = sim.keysAt
     return
 
   let pool = candidates[0 ..< min(8, candidates.len)]
