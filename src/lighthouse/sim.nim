@@ -310,8 +310,11 @@ proc placeKeys(rng: var Rand, sim: var Sim) =
     y += 2
   ## Nearest dead ends first, not farthest: a key in the far tail of a
   ## perfect maze cannot be fetched and carried back inside the tick
-  ## budget. See README, "Deviations". The dead-end filter still means a
-  ## blind runner cannot find one without the keeper.
+  ## budget. See README, "Deviations". At the shipped 11 x 9 there are
+  ## usually fewer than `keyCount` eligible dead ends, so the total
+  ## fallback below is the NORMAL path, not a defensive one; what keeps
+  ## the keeper load-bearing on those boards is the distance filter the
+  ## fallback shares, not dead-endness.
   candidates = rankByExitDistance(exitField, width, candidates,
     nearestFirst = true)
 
