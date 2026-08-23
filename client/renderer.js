@@ -617,7 +617,7 @@
         layout.scale);
     }
 
-    drawLighthouse(ctx, layout, view, now, fx);
+    drawLighthouse(ctx, images, layout, view, now, fx);
     // The keeper's private notes, on paper under the tower: the audience
     // watches the plan form. Only where there is room for it.
     var keeper = (view.seats || [])[0];
@@ -629,7 +629,7 @@
           layout.scale);
       }
     }
-    drawThumbnails(ctx, layout, view, now);
+    drawThumbnails(ctx, images, layout, view, now);
     drawSubtitle(ctx, layout, view, now, fx);
   }
 
@@ -638,11 +638,21 @@
     var sprite = images["soldier_" + color + "_front.png"];
     var cx = layout.boardX + (seat.pos[0] + 0.5) * cell;
     var cy = layout.boardY + (seat.pos[1] + 0.5) * cell;
-    var size = cell * 0.92;
+    // The nano-banana cog is drawn larger than its tile with its wheels
+    // on the tile's lower edge, so the kit (life ring, pack, flag) reads
+    // at board scale; the seat tint sits in a ground ellipse under the
+    // wheels rather than a ring that would hide the kit.
+    var size = cell * 1.45;
+    var feet = cy + cell * 0.42;
     ctx.save();
     if (sprite && sprite.width) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(sprite, cx - size / 2, cy - size / 2, size, size);
+      ctx.fillStyle = rgba(COLOR_HEX[color], 0.55);
+      ctx.beginPath();
+      ctx.ellipse(cx, feet - cell * 0.02, cell * 0.36, cell * 0.11, 0, 0,
+        Math.PI * 2);
+      ctx.fill();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(sprite, cx - size / 2, feet - size, size, size);
     } else {
       ctx.fillStyle = COLOR_HEX[color];
       ctx.fillRect(cx - size / 3, cy - size / 3, size / 1.5, size / 1.5);
@@ -652,7 +662,8 @@
       ctx.lineWidth = Math.max(1, cell * 0.07);
       ctx.setLineDash([cell * 0.2, cell * 0.16]);
       ctx.beginPath();
-      ctx.arc(cx, cy, cell * 0.52, 0, Math.PI * 2);
+      ctx.ellipse(cx, feet - cell * 0.02, cell * 0.46, cell * 0.16, 0, 0,
+        Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -688,7 +699,7 @@
 
   // The tower: the show's logo moment, and a second read on "the keeper
   // spoke" — the beam flares on every transmit.
-  function drawLighthouse(ctx, layout, view, now, fx) {
+  function drawLighthouse(ctx, images, layout, view, now, fx) {
     var s = Math.max(18, Math.min(46, layout.height * 0.11));
     var x = layout.margin + s * 0.6;
     var y = layout.margin + s * 1.25;
@@ -725,10 +736,17 @@
     ctx.fillRect(x - s * 0.2, y - s * 0.9, s * 0.4, s * 0.35);
     ctx.fillStyle = INK;
     ctx.fillRect(x - s * 0.24, y - s * 0.95, s * 0.48, s * 0.07);
+    // The keeper, lantern raised, at the foot of the tower.
+    var keeper = images["soldier_red_front.png"];
+    if (keeper && keeper.width) {
+      var ks = s * 1.6;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(keeper, x + s * 0.2, y + s * 0.6 - ks, ks, ks);
+    }
     ctx.restore();
   }
 
-  function drawThumbnails(ctx, layout, view, now) {
+  function drawThumbnails(ctx, images, layout, view, now) {
     if (!layout.thumbs.length) return;
     var runners = runnerSeats(view);
     layout.thumbs.forEach(function (box, index) {
@@ -762,9 +780,17 @@
               ctx.fillRect(px + sub * 0.2, py + sub * 0.2, sub * 0.6,
                 sub * 0.6);
             } else if (g === "@") {
-              ctx.fillStyle = color;
-              ctx.fillRect(px + sub * 0.22, py + sub * 0.22, sub * 0.56,
-                sub * 0.56);
+              var me = images["soldier_" + seatColor(index + 1) +
+                "_front.png"];
+              if (me && me.width) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.drawImage(me, px - sub * 0.1, py - sub * 0.25,
+                  sub * 1.2, sub * 1.2);
+              } else {
+                ctx.fillStyle = color;
+                ctx.fillRect(px + sub * 0.22, py + sub * 0.22, sub * 0.56,
+                  sub * 0.56);
+              }
             } else if (g === "1" || g === "2" || g === "3") {
               ctx.fillStyle = COLOR_HEX[seatColor(Number(g))];
               ctx.fillRect(px + sub * 0.3, py + sub * 0.3, sub * 0.4,
