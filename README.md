@@ -126,6 +126,8 @@ anywhere. `tools/ci/policies.json` holds the shipped set: two LLM champions
 
 ## Layout
 
+Training exports and numeric reinforcement learning: [docs/TRAINING.md](docs/TRAINING.md).
+
 ```
 src/lighthouse/types.nim    config, moves, statuses, the flat event record
 src/lighthouse/sim.nim      pure rules: maze, tide, the twelve steps, replay
