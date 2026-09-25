@@ -3,13 +3,6 @@
 import std/[json, os, osproc, strutils]
 import lighthouse/[sim, llm]
 
-proc reply(seat: int, decision: Decision): JsonNode =
-  if seat == KeeperSeat:
-    %*{"transmit": decision.transmit, "message": decision.message,
-      "notes": decision.notes}
-  else:
-    %*{"move": $decision.move, "notes": decision.notes}
-
 when isMainModule:
   let args = commandLineParams()
   if args.len != 3:
@@ -49,7 +42,7 @@ when isMainModule:
         scripted: array[Seats, bool]
       for seat in seats:
         let decision = scriptedAction(game, seat, skAuto)
-        let completion = reply(seat, decision)
+        let completion = decisionJson(seat, decision)
         let accepted = parseReply(seat, completion)
         doAssert accepted.move == decision.move
         doAssert accepted.transmit == decision.transmit

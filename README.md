@@ -24,13 +24,11 @@ each other. The bridge is one-way by design; that is the asymmetry the game
 is about. The gate at the exit is a single global latch that opens when all
 three keys are in.
 
-**The game is LLM-driven and a policy is just a prompt.** Every tick the
-server composes each seat's observation — the whole map for the keeper, a
-3 × 3 window plus the keeper's last words for a runner — adds that seat's
-policy prompt, and asks Claude. Decisions are simultaneous by rule, so all
-four seats' calls go out as **one parallel batch per tick**, never in
-series. Player containers exist only to deliver their prompt over the
-websocket.
+Every tick the game composes each seat's private observation — the whole
+map for the keeper, a 3 × 3 window plus the keeper's last words for a runner.
+The bundled prompt player asks Claude through the game server. Ordinary
+players receive that same private prompt and send a complete role action
+over the player websocket. The game resolves all four decisions together.
 
 Two built-in **scripted baselines** play any seat that registers as
 scripted — and every seat when no LLM credentials are available, so
@@ -114,13 +112,16 @@ note's §Tests passes as written; none was weakened.
 
 ## Field a policy
 
-```bash
-coworld upload-policy coworld-lighthouse:latest --name my-lighthouse \
-  --run /bin/lighthouse-player \
-  --secret-env PLAYER_PROMPT="<your strategy>"
-```
+The bundled prompt player uses `/bin/lighthouse-player` and `PLAYER_PROMPT`.
+The separate `Dockerfile.ordinary-player` runs canned or Jev decisions over
+the same seat socket. A trained image also needs its base model, adapter,
+PyTorch, Transformers, and PEFT packaged locally. Set `LIGHTHOUSE_JEV=1`
+for Jev or `LIGHTHOUSE_ADAPTER_DIR` for a trained image. Set
+`LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` to capture
+accepted decisions in the standard player artifact. See
+[training](docs/TRAINING.md) for collection and export.
 
-Your prompt must work in **either** role — the platform may seat it
+The bundled player's prompt must work in **either** role — the platform may seat it
 anywhere. `tools/ci/policies.json` holds the shipped set: two LLM champions
 (`lighthouse-beacon`, `lighthouse-pilot`) and the two scripted baselines.
 

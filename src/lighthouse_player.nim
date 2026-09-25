@@ -1,4 +1,4 @@
-## Lighthouse player: a policy is just a prompt.
+## Lighthouse bundled prompt player.
 ##
 ## Connects to the game, delivers its prompt (from PLAYER_PROMPT, or a
 ## default Lighthouse strategy), then idles until the final frame. All of
@@ -10,7 +10,7 @@
 ## PLAYER_SCRIPTED=1 as whichever of the two the dealt slot needs. The
 ## server plays those deterministically, no LLM.
 ##
-## To field your own policy, reuse this image and set PLAYER_PROMPT:
+## To field a prompt policy, reuse this image and set PLAYER_PROMPT:
 ##   coworld upload-policy <lighthouse-image> --name my-lighthouse \
 ##     --run /bin/lighthouse-player \
 ##     --secret-env PLAYER_PROMPT="<your strategy>"

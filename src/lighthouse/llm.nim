@@ -446,6 +446,14 @@ proc scriptedAction*(sim: Sim, seat: int, kind: ScriptKind): Decision =
   else:
     wallhugAction(sim, seat - 1)
 
+proc decisionJson*(seat: int, decision: Decision): JsonNode =
+  ## Complete normal player action for the dealt role.
+  if seat == KeeperSeat:
+    %*{"transmit": decision.transmit, "message": decision.message,
+      "notes": decision.notes}
+  else:
+    %*{"move": $decision.move, "notes": decision.notes}
+
 # ---- Prompt building --------------------------------------------------------
 
 proc operatorBlock(prompt: string): string =
