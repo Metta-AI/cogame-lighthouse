@@ -7,17 +7,14 @@
 ## Everything random is drawn from the seed at `initSim`, so a replay
 ## re-derives the episode from the recorded tick events alone.
 
-import std/[algorithm, json, math, random, strutils], types
+import std/[algorithm, json, random, strutils], types
 
 export types
 
 const
-  ## An episode's whole model-call allowance (four calls per tick: the
-  ## keeper and three runners). A hosted episode is killed if it outlives
-  ## the platform's artifact timeout, so `maxTicks` is capped to this at
-  ## sample time.
-  EpisodeCallBudget* = 220
-  CallsPerTick* = 4
+  ## Bound episode length so hosted play can write results and replay
+  ## within its artifact timeout, regardless of which players are seated.
+  MaxEpisodeTicks* = 55
   MinTicks* = 4
   ## Total spectator-pacing sleep an episode may spend, in milliseconds.
   PacingBudgetMs* = 15_000
@@ -140,14 +137,13 @@ proc tableNames*(players: seq[PlayerConfig], seed: int): seq[string] =
       result.add("Cog " & $index)
 
 proc sampleEpisode*(config: GameConfig): GameConfig =
-  ## Fits the tick count into one episode's call budget. Idempotent: a
+  ## Fits the tick count into the hosted episode budget. Idempotent: a
   ## config that already carries the cap (a replay being re-read) is
   ## untouched.
   result = config
   if result.sampled:
     return
-  result.maxTicks =
-    max(min(config.maxTicks, EpisodeCallBudget div CallsPerTick), MinTicks)
+  result.maxTicks = max(min(config.maxTicks, MaxEpisodeTicks), MinTicks)
   result.turnDelayMs =
     min(config.turnDelayMs, PacingBudgetMs div max(result.maxTicks, 1))
   result.sampled = true
@@ -483,6 +479,70 @@ proc runnerWindow*(sim: Sim, runner: int): array[3, string] =
         if dx == 0 and dy == 0: '@'
         else: sim.glyphAt(x, y)
     result[dy + 1] = line
+
+proc seatDecisionView*(sim: Sim, seat: int): JsonNode =
+  ## One policy observation. Keep the runner's hidden map and coordinates
+  ## out of its turn, and keep every other seat's notes out of both roles.
+  result = %*{
+    "alias": sim.names[seat],
+    "role": (if seat == KeeperSeat: "keeper" else: "runner"),
+    "tick": sim.tick,
+    "maxTicks": sim.config.maxTicks,
+    "keysCollected": sim.keysCollected,
+    "keyCount": sim.config.keyCount,
+    "gateOpen": sim.gateOpen,
+    "notes": sim.notes[seat]
+  }
+  if seat == KeeperSeat:
+    var runners = newJArray()
+    for index in 0 ..< Runners:
+      runners.add(%*{
+        "alias": sim.names[index + 1],
+        "status": $sim.status[index],
+        "position": [sim.pos[index].x, sim.pos[index].y],
+        "keysHeld": sim.keysHeld[index],
+        "lastMove": $sim.lastMove[index],
+        "blocked": sim.blocked[index]
+      })
+    var messages = newJArray()
+    for entry in sim.messages:
+      messages.add(%*{"tick": entry[0], "text": entry[1]})
+    var lastMessageClock = -1
+    if sim.messages.len > 0:
+      for index in countdown(sim.events.high, 0):
+        let event = sim.events[index]
+        if event.kind == evTick and event.tick == sim.messages[^1][0]:
+          lastMessageClock = event.clock
+          break
+    var keyJustCollected = false
+    for event in sim.events:
+      if event.kind == evKey and event.tick == sim.tick - 1 and
+          event.keysCollected >= sim.config.keyCount:
+        keyJustCollected = true
+        break
+    var floorKeys = newJArray()
+    for key in sim.keysOnFloor:
+      floorKeys.add(%*[key.x, key.y])
+    result["maze"] = %sim.grid
+    result["exit"] = %*[sim.exitAt.x, sim.exitAt.y]
+    result["keysOnFloor"] = floorKeys
+    result["runners"] = runners
+    result["clock"] = %sim.clock
+    result["tideDelay"] = %sim.config.tideDelay
+    result["tidePeriod"] = %sim.config.tidePeriod
+    result["waterLine"] = %sim.waterLine()
+    result["messages"] = messages
+    result["lastMessageClock"] = %lastMessageClock
+    result["keyJustCollected"] = %keyJustCollected
+  else:
+    let runner = seat - 1
+    result["window"] = %sim.runnerWindow(runner)
+    result["keysHeld"] = %sim.keysHeld[runner]
+    result["inbox"] = %sim.inbox
+    result["standing"] = %sim.standing
+    result["standingAge"] = %(
+      if sim.standingTick < 0: -1 else: sim.tick - sim.standingTick)
+    result["moveHistory"] = %sim.moveHistory[runner]
 
 proc teamScore*(sim: Sim): float =
   ## Fully cooperative and identical for every seat. Higher is better.

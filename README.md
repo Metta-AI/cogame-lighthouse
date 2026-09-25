@@ -24,17 +24,15 @@ each other. The bridge is one-way by design; that is the asymmetry the game
 is about. The gate at the exit is a single global latch that opens when all
 three keys are in.
 
-**The game is LLM-driven and a policy is just a prompt.** Every tick the
-server composes each seat's observation — the whole map for the keeper, a
-3 × 3 window plus the keeper's last words for a runner — adds that seat's
-policy prompt, and asks Claude. Decisions are simultaneous by rule, so all
-four seats' calls go out as **one parallel batch per tick**, never in
-series. Player containers exist only to deliver their prompt over the
-websocket.
+Every tick the game sends each seat a private structured observation — the
+whole map for the keeper, a 3 × 3 window plus the keeper's last words for a
+runner. Prompt, scripted, Jev, and trained policies build their own decisions
+and submit complete role actions over the same player websocket. The game
+resolves all four decisions together.
 
-Two built-in **scripted baselines** play any seat that registers as
-scripted — and every seat when no LLM credentials are available, so
-episodes (and offline certification) always complete:
+Two bundled **scripted baselines** compute their actions from the private
+observation. A prompt player without model credentials chooses the same
+baseline. The game also uses it if a seat misses its action deadline:
 
 - **`lantern`** (keeper): breadth-first search from the exit and from every
   uncollected key over the unflooded floor, greedy nearest-key assignment,
@@ -94,7 +92,7 @@ unreachable at them. Each is flagged in the code at the point of change.
 
 | what | note | shipped | why |
 |---|---|---|---|
-| default board | 17 × 11 | **11 × 9** | On a *perfect* maze the unique start → key → exit path on a 17 × 11 board measures **47–93 tiles** (min over key/runner assignments of the max over runners; 47 is the best of the four fixture seeds, 93 the worst of sixty). `maxTicks` is 45 and is capped at 55 by `EpisodeCallBudget div CallsPerTick`, so `escaped == 3` was unreachable **by any policy at all**, LLM or scripted. |
+| default board | 17 × 11 | **11 × 9** | On a *perfect* maze the unique start → key → exit path on a 17 × 11 board measures **47–93 tiles** (min over key/runner assignments of the max over runners; 47 is the best of the four fixture seeds, 93 the worst of sixty). `maxTicks` is 45 and capped at 55 for hosted artifact time, so `escaped == 3` was unreachable **by any policy at all**, LLM or scripted. |
 | key placement | the *farthest* dead ends (`descending`) | the **nearest** dead ends (`ascending`) | Same measurement: a key in the far tail of a perfect maze cannot be fetched and carried back inside the tick budget. The dead-end + non-adjacent + `y ≤ height − 4` filters are unchanged. At 11 × 9 a 5 × 4-room maze rarely offers three eligible dead ends (0–3, measured over 13 seeds; 11 of them take the documented floor-tile fallback), so in practice the keys are the farthest tiles above the drowning rows, pairwise ≥ 6 apart — still deep in corridors a blind runner cannot search without the keeper, but the dead-end rule is the preference, not the usual outcome. |
 | `tidePeriod` | 4 (`spring-tide` 3) | **7** (`spring-tide` **5**) | This is the note's *own* documented decision rule (§Tests, `test_bot` #4: "the fix is to raise `standard`'s `tidePeriod` … rather than to weaken the maze"). Measured: 4 and 5 do not clear its bar, 7 does. |
 | `lantern` transmit | rhythm + three exceptions | same, plus **never twice in a row**, and an exception may only break the rhythm to say something **new** | With three runners, "any runner's step differs from the last message" fires almost every tick, giving a 64–68 % talk rate against the note's own ≤ 60 % bar. Not speaking twice in a row bounds it structurally at ~51 %. |
@@ -114,13 +112,16 @@ note's §Tests passes as written; none was weakened.
 
 ## Field a policy
 
-```bash
-coworld upload-policy coworld-lighthouse:latest --name my-lighthouse \
-  --run /bin/lighthouse-player \
-  --secret-env PLAYER_PROMPT="<your strategy>"
-```
+The bundled prompt player uses `/bin/lighthouse-player` and `PLAYER_PROMPT`
+inside its own container. The separate `Dockerfile.ordinary-player` runs
+canned or Jev decisions over the same seat socket. A trained image needs its base model, adapter,
+PyTorch, Transformers, and PEFT packaged locally. Set `LIGHTHOUSE_JEV=1`
+for Jev or `LIGHTHOUSE_ADAPTER_DIR` for a trained image. Set
+`LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` to capture
+accepted decisions in the standard player artifact. See
+[training](docs/TRAINING.md) for collection and export.
 
-Your prompt must work in **either** role — the platform may seat it
+The bundled player's prompt must work in **either** role — the platform may seat it
 anywhere. `tools/ci/policies.json` holds the shipped set: two LLM champions
 (`lighthouse-beacon`, `lighthouse-pilot`) and the two scripted baselines.
 
@@ -131,11 +132,11 @@ Training exports and numeric reinforcement learning: [docs/TRAINING.md](docs/TRA
 ```
 src/lighthouse/types.nim    config, moves, statuses, the flat event record
 src/lighthouse/sim.nim      pure rules: maze, tide, the twelve steps, replay
-src/lighthouse/llm.nim      Claude transport, one parallel batch per tick,
-                            lantern and wallhug
+src/lighthouse/rules.nim    action parser and lantern/wallhug policies
+src/lighthouse/player_policy.nim  player-side prompt and model calls
 src/lighthouse/server.nim   the Coworld game contract and the tick loop
 src/lighthouse.nim          game entrypoint            -> /bin/lighthouse
-src/lighthouse_player.nim   prompt delivery            -> /bin/lighthouse-player
+src/lighthouse_player.nim   bundled player policy      -> /bin/lighthouse-player
 client/                     renderer.js, chrome.css, the three live pages
 client/fixtures/            gen_fixture.js + sample_replay.json + dev_shell
 replay-viewer/              the static wasm bundle (same sim, in the browser)
@@ -186,9 +187,8 @@ nim r --path:src tests/test_sim.nim
 ```
 
 CI runs every `tests/*.nim` twice (debug and `-d:release`), then a raw-Docker
-one-episode smoke in the production image with **no** `ANTHROPIC_API_KEY` —
-so the all-scripted completion path is the one that has to work — then the
-wasm viewer build.
+episode in the production image without a model credential. Each bundled
+player submits its own action, and the wasm viewer build follows.
 
 ## License
 

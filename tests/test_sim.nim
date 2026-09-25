@@ -1,5 +1,5 @@
 import std/[json, sets, strutils, unicode, unittest]
-import lighthouse/[llm, sim]
+import lighthouse/[rules, sim]
 
 const Seeds = [1, 7, 42, 1234]
 
@@ -514,7 +514,7 @@ suite "determinism":
     config.sampled = false
     config.turnDelayMs = 10_000
     let fitted = sampleEpisode(config)
-    check fitted.maxTicks == EpisodeCallBudget div CallsPerTick
+    check fitted.maxTicks == MaxEpisodeTicks
     check fitted.maxTicks == 55
     check fitted.turnDelayMs == PacingBudgetMs div 55
     check fitted.sampled
@@ -529,6 +529,28 @@ suite "determinism":
     check sampleEpisode(shipped).turnDelayMs == 250
 
 suite "views":
+  test "decision observations expose only the dealt role's information":
+    var sim = handSim(keys = @[(4, 3)], starts = [(2, 3), (6, 6), (7, 7)])
+    sim.notes[0] = "keeper private note"
+    sim.notes[1] = "runner private note"
+    sim.inbox = "Sprocket N"
+    let keeper = sim.seatDecisionView(0)
+    let runner = sim.seatDecisionView(1)
+    check keeper["role"].getStr() == "keeper"
+    check keeper["maze"].len == sim.config.height
+    check keeper["runners"].len == Runners
+    check keeper["notes"].getStr() == "keeper private note"
+    check not keeper.hasKey("window")
+    check "runner private note" notin $keeper
+    check runner["role"].getStr() == "runner"
+    check runner["window"][1].getStr()[1] == '@'
+    check runner["inbox"].getStr() == "Sprocket N"
+    check runner["notes"].getStr() == "runner private note"
+    for hidden in ["maze", "exit", "keysOnFloor", "runners", "clock",
+        "tideDelay", "tidePeriod", "waterLine", "messages"]:
+      check not runner.hasKey(hidden)
+    check "keeper private note" notin $runner
+
   test "the keeper sees the board and a runner sees three by three":
     var sim = handSim(keys = @[(4, 3)], starts = [(2, 3), (6, 6), (7, 7)])
     let view = sim.keeperView().splitLines()

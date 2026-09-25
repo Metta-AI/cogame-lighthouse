@@ -20,9 +20,7 @@ type
     sampled*: bool        ## true once the budget cap has been applied
     turnDelayMs*: int
     playerConnectTimeoutSeconds*: float
-    model*: string
-    maxOutputTokens*: int
-    llmTimeoutSeconds*: int
+    decisionTimeoutSeconds*: int
 
   Move* = enum
     mvWait = "WAIT"
@@ -74,8 +72,8 @@ proc defaultGameConfig*(): GameConfig =
     maxTicks: 45,
     # 11 x 9, not the design note's 17 x 11: on a PERFECT maze the unique
     # start -> key -> exit path on a 17 x 11 board is 47 to 93 tiles, so
-    # `escaped == 3` is unreachable inside maxTicks (capped at 55 by the
-    # model-call budget) by any policy at all. See README, "Deviations".
+    # `escaped == 3` is unreachable inside the shipped 45-tick game by any
+    # policy at all. See README, "Deviations".
     width: 11,
     height: 9,
     tideDelay: 10,
@@ -87,9 +85,7 @@ proc defaultGameConfig*(): GameConfig =
     episodeTimeoutSeconds: 1200,
     turnDelayMs: 250,
     playerConnectTimeoutSeconds: 180,
-    model: "claude-sonnet-5",
-    maxOutputTokens: 900,
-    llmTimeoutSeconds: 18
+    decisionTimeoutSeconds: 18
   )
 
 proc update*(config: var GameConfig, configJson: string) =
@@ -130,12 +126,8 @@ proc update*(config: var GameConfig, configJson: string) =
   if node.hasKey("player_connect_timeout_seconds"):
     config.playerConnectTimeoutSeconds =
       node["player_connect_timeout_seconds"].getFloat()
-  if node.hasKey("model"):
-    config.model = node["model"].getStr()
-  if node.hasKey("maxOutputTokens"):
-    config.maxOutputTokens = node["maxOutputTokens"].getInt()
-  if node.hasKey("llmTimeoutSeconds"):
-    config.llmTimeoutSeconds = node["llmTimeoutSeconds"].getInt()
+  if node.hasKey("decisionTimeoutSeconds"):
+    config.decisionTimeoutSeconds = node["decisionTimeoutSeconds"].getInt()
   if config.maxTicks < 4:
     raise newException(LighthouseError, "maxTicks must be at least 4")
   if config.width < 9 or config.width mod 2 == 0:

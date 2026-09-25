@@ -1,6 +1,6 @@
 version     = "0.1.0"
 author      = "daveey"
-description = "Lighthouse: one cog sees the whole maze and cannot move; three blind runners must collect the keys and get out before the tide. A policy is just a prompt."
+description = "Lighthouse: one cog sees the whole maze and cannot move; three blind runners collect keys and escape the tide through ordinary private player views and actions."
 license     = "MIT"
 
 srcDir = "src"

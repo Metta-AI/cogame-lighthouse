@@ -1,23 +1,15 @@
-## Lighthouse player: a policy is just a prompt.
+## Lighthouse bundled prompt and scripted policies. Every decision is made
+## here from the ordinary private turn observation and submitted to the game.
 ##
-## Connects to the game, delivers its prompt (from PLAYER_PROMPT, or a
-## default Lighthouse strategy), then idles until the final frame. All of
-## the actual decision making happens inside the game server, which sends
-## this seat's prompt plus its observation to Claude every tick.
-##
-## PLAYER_SCRIPTED=lantern registers the seat as the built-in keeper
-## baseline, PLAYER_SCRIPTED=wallhug as the runner baseline, and
-## PLAYER_SCRIPTED=1 as whichever of the two the dealt slot needs. The
-## server plays those deterministically, no LLM.
-##
-## To field your own policy, reuse this image and set PLAYER_PROMPT:
+## To field a prompt policy, reuse this image and set PLAYER_PROMPT:
 ##   coworld upload-policy <lighthouse-image> --name my-lighthouse \
 ##     --run /bin/lighthouse-player \
 ##     --secret-env PLAYER_PROMPT="<your strategy>"
 
 import
   std/[json, options, os, strutils],
-  whisky
+  whisky,
+  lighthouse/[rules, player_policy]
 
 const DefaultPrompt = """
 As KEEPER: you are the only one who can see. Spend ticks on words only
@@ -44,16 +36,17 @@ when isMainModule:
   var prompt = getEnv("PLAYER_PROMPT")
   if prompt.len == 0:
     prompt = DefaultPrompt
-  let scripted = getEnv("PLAYER_SCRIPTED").strip()
-
-  proc promptFrame(): string =
-    $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted}
+  let scripted = parseScriptKind(getEnv("PLAYER_SCRIPTED")) != skNone
+  let client =
+    if scripted: nil
+    else: newLlmClient(
+      getEnv("PLAYER_MODEL", "claude-sonnet-5"),
+      parseInt(getEnv("PLAYER_MAX_OUTPUT_TOKENS", "900")),
+      parseInt(getEnv("PLAYER_TIMEOUT_SECONDS", "18")))
 
   echo "lighthouse player: connecting to game"
   let socket = newWebSocket(url)
-  socket.send(promptFrame())
-  echo "lighthouse player: prompt delivered (", prompt.len, " chars",
-    (if scripted.len > 0: ", scripted " & scripted else: ""), ")"
+  var slot = -1
 
   while true:
     let received = socket.receiveMessage()
@@ -63,21 +56,31 @@ when isMainModule:
     let message = received.get()
     if message.kind != TextMessage:
       continue
-    try:
-      let payload = parseJson(message.data)
-      case payload{"type"}.getStr()
-      of "welcome":
-        echo "lighthouse player: seated at slot ",
-          payload{"slot"}.getInt(), " as ", payload{"name"}.getStr(),
-          " (", payload{"role"}.getStr(), ")"
-        ## Re-deliver the prompt after the welcome, in case the first send
-        ## raced the server's slot registration.
-        socket.send(promptFrame())
-      of "final":
-        echo "lighthouse player: final scores ", payload{"scores"}
-        break
-      else:
-        discard
-    except CatchableError as error:
-      echo "lighthouse player: ignoring bad frame: ", error.msg
+    let payload = parseJson(message.data)
+    case payload{"type"}.getStr()
+    of "welcome":
+      slot = payload["slot"].getInt()
+      echo "lighthouse player: seated at slot ", slot,
+        " as ", payload["name"].getStr(),
+        " (", payload["role"].getStr(), ")"
+    of "turn":
+      let view = payload["view"]
+      let fallback = scripted or client.disabled
+      let decision =
+        if fallback: scriptedActionFromView(view)
+        else: choosePromptAction(client, view, prompt, slot)
+      socket.send($ %*{
+        "type": "decision", "tick": payload["tick"],
+        "source": (if fallback: "scripted" else: "player"),
+        "action": decisionJson(slot, decision)
+      })
+    of "decision_result":
+      if not payload["accepted"].getBool():
+        raise newException(ValueError,
+          "game rejected player action on tick " & $payload["tick"].getInt())
+    of "final":
+      echo "lighthouse player: final scores ", payload{"scores"}
+      break
+    else:
+      discard
   socket.close()
