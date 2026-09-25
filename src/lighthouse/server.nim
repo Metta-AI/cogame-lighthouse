@@ -12,41 +12,31 @@
 ##   WS  /global                     - spectator snapshots
 ##   WS  /replay                     - replay payload (replay mode)
 ##
-## Player protocol (lighthouse.player.v2), all JSON text frames:
+## Player protocol (lighthouse.player.v3), all JSON text frames:
 ##   game -> player: {"type":"welcome","slot":N,"name":...,"role":...}
 ##                   {"type":"state",...} after every tick (redacted: the
 ##                   whole game is hidden information)
 ##                   {"type":"final","scores":[...],"roles":[...]}
-##   player -> game: {"type":"prompt","prompt":"...","scripted":"lantern",
-##                   "external":bool}
-##                   (max 4000 chars; scripted plays a built-in baseline
-##                   for that seat: "lantern", "wallhug", or "1" for
-##                   whichever the dealt slot needs)
-##                   {"type":"decision","tick":N,"action":{...}}
-##   game -> external player: {"type":"turn","tick":N,"system":str,
-##                            "user":str,"candidates":[...]}
+##   game -> player: {"type":"turn","tick":N,"view":{...}}
+##   player -> game: {"type":"decision","tick":N,"action":{...}}
 ##                   {"type":"decision_result","tick":N,"accepted":bool}
 
 import
-  std/[json, locks, os, sets, strutils, tables, times, unicode],
+  std/[json, locks, os, sets, strutils, tables, times],
   bitworld/runtime,
   curly,
   mummy,
   mummy/routers,
-  llm,
+  rules,
   sim
 
 const
-  MaxPromptLen = 4000
   ReplayVersion = 1
 
 type
   GameState = object
     config: GameConfig
     sim: Sim
-    prompts: seq[string]
-    scripted: seq[ScriptKind]
-    external: seq[bool]
     pendingTick: int
     pendingDecisions: Table[int, Decision]
     playerSockets: Table[int, WebSocket]
@@ -278,8 +268,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         config.tokens.len, " players connected"
       state.broadcastLocked()
 
-    let client = newLlmClient(config)
-
     ## The platform kills the episode at its timeout and keeps nothing.
     ## Play inside a fraction of it so results and the replay are written
     ## with room to spare. The hosted dispatcher hands the timeout only to
@@ -304,9 +292,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
     while true:
       var simCopy: Sim
       var seats: seq[int]
-      var prompts: seq[string]
-      var scripted: seq[ScriptKind]
-      var external: seq[bool]
       withLock stateLock:
         if state.sim.done:
           break
@@ -321,63 +306,37 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           break
         seats = state.sim.pendingSeats()
         simCopy = state.sim
-        prompts = state.prompts
-        scripted = state.scripted
-        external = state.external
         echo "lighthouse: tick ", state.sim.tick, " of ", config.maxTicks,
           " (clock ", state.sim.clock, ", water line ",
           state.sim.waterLine(), ") at ", (epochTime() - gameStart).int, "s"
 
-      let decisionDeadline = epochTime() + config.llmTimeoutSeconds.float
-      var modelSeats, waitingSeats: seq[int]
+      let decisionDeadline = epochTime() + config.decisionTimeoutSeconds.float
       withLock stateLock:
         state.pendingTick = simCopy.tick
         state.pendingDecisions.clear()
         for seat in seats:
-          if not external[seat]:
-            modelSeats.add(seat)
-            continue
           if state.playerSockets.hasKey(seat):
             state.playerSockets[seat].send($ %*{
               "type": "turn",
               "tick": simCopy.tick,
-              "system": systemPrompt(simCopy, seat),
-              "user": userPrompt(simCopy, seat, prompts[seat]),
-              "candidates": [
-                {"id": (if seat == KeeperSeat: "lantern" else: "wallhug"),
-                 "action": decisionJson(seat,
-                   scriptedAction(simCopy, seat, skAuto))},
-                {"id": (if seat == KeeperSeat: "quiet" else: "wait"),
-                 "action": decisionJson(seat, Decision())}
-              ]
+              "view": simCopy.seatDecisionView(seat)
             })
-            waitingSeats.add(seat)
-      let modelDecisions = client.decideAll(simCopy, modelSeats, prompts,
-        scripted)
-      while waitingSeats.len > 0 and epochTime() < decisionDeadline:
+      while epochTime() < decisionDeadline:
         var received = 0
         withLock stateLock:
-          for seat in waitingSeats:
+          for seat in seats:
             if state.pendingDecisions.hasKey(seat):
               received.inc
-        if received == waitingSeats.len:
+        if received == seats.len:
           break
         sleep(20)
       var decisions = newSeq[Decision](seats.len)
-      var modelIndex = 0
-      for index, seat in seats:
-        if external[seat]:
-          continue
-        decisions[index] = modelDecisions[modelIndex]
-        modelIndex.inc
       withLock stateLock:
         for index, seat in seats:
-          if not external[seat]:
-            continue
           if state.pendingDecisions.hasKey(seat):
             decisions[index] = state.pendingDecisions[seat]
           else:
-            echo "lighthouse: external seat ", seat,
+            echo "lighthouse: seat ", seat,
               " using scripted fallback"
             decisions[index] = scriptedAction(simCopy, seat, skAuto)
         state.pendingTick = -1
@@ -410,11 +369,11 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           state.sim.endEarly()
           applied = false
         state.broadcastLocked()
-        for index, seat in seats:
-          if external[seat] and state.playerSockets.hasKey(seat):
+        for seat in seats:
+          if state.playerSockets.hasKey(seat):
             state.playerSockets[seat].send($ %*{
               "type": "decision_result", "tick": simCopy.tick,
-              "accepted": applied and not decisions[index].scripted
+              "accepted": applied and state.pendingDecisions.hasKey(seat)
             })
 
       ## Pace between ticks so spectators can read the board.
@@ -497,7 +456,7 @@ proc playerUpgradeHandler(request: Request) {.gcsafe.} =
         state.playerSockets.len, "/", state.config.tokens.len, ")"
       websocket.send($ %*{
         "type": "welcome",
-        "protocol": "lighthouse.player.v2",
+        "protocol": "lighthouse.player.v3",
         "slot": slot,
         "name": state.sim.names[slot],
         "role": roleName(slot),
@@ -542,42 +501,18 @@ proc websocketHandler(
         return
       try:
         let payload = parseJson(message.data)
-        if payload{"type"}.getStr() == "prompt":
-          var prompt = payload{"prompt"}.getStr()
-          if prompt.runeLen > MaxPromptLen:
-            prompt = prompt.runeSubStr(0, MaxPromptLen)
-          let node = payload{"scripted"}
-          let registered =
-            if node.isNil: skNone
-            elif node.kind == JBool: (if node.getBool(): skAuto else: skNone)
-            else: parseScriptKind(node.getStr())
-          let external = payload{"external"}.getBool(false)
-          if external and registered != skNone:
-            raise newException(LighthouseError,
-              "an external player cannot register as scripted")
-          let playing = roleKind(slot, registered)
-          if registered != skNone and registered != skAuto and
-              registered != playing:
-            echo "lighthouse: slot ", slot, " registered ", $registered,
-              "; playing ", $playing, " for its role"
-          withLock stateLock:
-            state.prompts[slot] = prompt
-            state.scripted[slot] = registered
-            state.external[slot] = external
-          echo "lighthouse: slot ", slot, " delivered a prompt (",
-            prompt.len, " chars",
-            (if registered != skNone: ", scripted " & $playing
-             elif external: ", external" else: ""), ")"
-        elif payload{"type"}.getStr() == "decision":
+        if payload{"type"}.getStr() == "decision":
           let tick = payload["tick"].getInt()
           let action = payload["action"]
           if action.kind != JObject:
             raise newException(LighthouseError,
               "decision action must be an object")
           withLock stateLock:
-            if state.external[slot] and tick == state.pendingTick and
+            if tick == state.pendingTick and
                 not state.pendingDecisions.hasKey(slot):
-              state.pendingDecisions[slot] = parseReply(slot, action)
+              var decision = parseReply(slot, action)
+              decision.scripted = payload{"source"}.getStr() == "scripted"
+              state.pendingDecisions[slot] = decision
       except CatchableError as error:
         echo "lighthouse: ignoring bad player frame: ", error.msg
     of ErrorEvent:
@@ -655,9 +590,6 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
     raise newException(LighthouseError, "tokens and players must align")
   state.config = config
   state.sim = initSim(config)
-  state.prompts = newSeq[string](config.players.len)
-  state.scripted = newSeq[ScriptKind](config.players.len)
-  state.external = newSeq[bool](config.players.len)
   state.pendingTick = -1
   state.pendingDecisions = initTable[int, Decision]()
   runtimeConfigGlobal = runtimeConfig

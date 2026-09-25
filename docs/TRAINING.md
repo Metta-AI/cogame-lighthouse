@@ -24,8 +24,8 @@ source revisions, and accepts the game's `complete` and `timeup` endings.
 The output uses `lighthouse-reply-v1`, matching the native exporter below.
 
 The exporter plays ten complete native episodes per certified variant.
-It records each seat's exact hosted system and user prompts, plus replies
-accepted by the production parser. Decisions within a tick use the same
+It records the bundled player's system and user prompts built from each
+private view, plus replies accepted by the production parser. Decisions within a tick use the same
 simulator state, then the native simulator resolves them together. Train
 and validation sets split complete episodes by seed.
 
@@ -49,7 +49,7 @@ uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
 
 ## Numeric reinforcement learning
 
-`tools/train_bridge.nim` exposes the hosted prompts and 219 numeric values.
+`tools/train_bridge.nim` exposes the bundled player's prompts and 219 numeric values.
 The keeper sees the complete maze; runners see only their own 3×3 window,
 last move, keys, bump flag, and public team state. Invisible map cells are
 zero and masked. Two choices select the published scripted policy or a

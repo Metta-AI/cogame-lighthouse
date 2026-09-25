@@ -14,7 +14,7 @@
     "replay_viewer": {
       "bundle": "static-replay-viewer"
     },
-    "description": "Lighthouse: a cooperative maze game of structural information asymmetry for four LLM-piloted cogs. One KEEPER sees the whole 11x9 perfect maze and cannot move; three blind RUNNERS see only the 3x3 window around themselves and must collect three keys and reach the exit before the tide drowns them. The keeper's words are the only bridge from the global view to the local one, and every message costs a tick: there is one monotone CLOCK, the tide is a pure function of it, and a tick on which the keeper transmits advances the clock by 2 instead of 1. Water rises from the bottom row upward and never recedes. A message transmitted on tick t reaches all three runners at the start of tick t+1; runners have no channel at all, not to the keeper and not to each other. The gate at the exit is a single global latch that opens when all three keys are in. Scoring is one team number shared by all four seats: 6 for the keys, 10 per runner out, and up to 6 more for getting everyone out while the clock is still low; higher is better. Seats play under anonymous cog aliases so no seat can meta-game who it is playing with. The bundled prompt player still asks Claude through the game server. An ordinary player policy receives its private turn and submits a complete keeper or runner action over the player socket; Jev can run inside that ordinary player. Two scripted baselines (lantern, the shortest-path keeper, and wallhug, the order-following wall-follower) play any seat that registers as scripted - and every seat when no LLM credentials are available, so episodes always complete.",
+    "description": "Lighthouse: a cooperative maze game of structural information asymmetry for four LLM-piloted cogs. One KEEPER sees the whole 11x9 perfect maze and cannot move; three blind RUNNERS see only the 3x3 window around themselves and must collect three keys and reach the exit before the tide drowns them. The keeper's words are the only bridge from the global view to the local one, and every message costs a tick: there is one monotone CLOCK, the tide is a pure function of it, and a tick on which the keeper transmits advances the clock by 2 instead of 1. Water rises from the bottom row upward and never recedes. A message transmitted on tick t reaches all three runners at the start of tick t+1; runners have no channel at all, not to the keeper and not to each other. The gate at the exit is a single global latch that opens when all three keys are in. Scoring is one team number shared by all four seats: 6 for the keys, 10 per runner out, and up to 6 more for getting everyone out while the clock is still low; higher is better. Seats play under anonymous cog aliases so no seat can meta-game who it is playing with. Prompt, scripted, Jev, and trained policies receive their own private observation and submit a complete keeper or runner action over the same player socket. Prompt model calls and Jev candidate ranking run in player containers. The game keeps visibility, action parsing, simultaneous resolution, scoring, timeout fallback, and replay.",
     "owner": "daveey@gmail.com",
     "runnable": {
       "type": "game",
@@ -22,9 +22,6 @@
       "run": [
         "/bin/lighthouse"
       ],
-      "env": {
-        "ANTHROPIC_API_KEY_URI": "secret://coworld/lighthouse/anthropic_api_key"
-      },
       "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
     },
     "config_schema": {
@@ -76,7 +73,7 @@
           "type": "integer"
         },
         "maxTicks": {
-          "description": "Ticks in the episode (capped by the model-call budget: four calls per tick).",
+          "description": "Ticks in the episode (capped at 55 for hosted results and replay time).",
           "type": "integer",
           "minimum": 4,
           "maximum": 55,
@@ -131,18 +128,8 @@
           "maximum": 2000,
           "default": 250
         },
-        "model": {
-          "description": "Claude model that drives every seat.",
-          "type": "string",
-          "default": "claude-sonnet-5"
-        },
-        "maxOutputTokens": {
-          "type": "integer",
-          "minimum": 64,
-          "maximum": 2000,
-          "default": 900
-        },
-        "llmTimeoutSeconds": {
+        "decisionTimeoutSeconds": {
+          "description": "Seconds a connected seat may take to submit an ordinary action before scripted fallback.",
           "type": "integer",
           "minimum": 5,
           "maximum": 300,
@@ -270,7 +257,7 @@
     "protocols": {
       "player": {
         "type": "text",
-        "value": "lighthouse.player.v2 - JSON text frames over COWORLD_PLAYER_WS_URL. Slot 0 is the keeper; slots 1-3 are runners. On connect the game sends {\"type\":\"welcome\",\"protocol\":\"lighthouse.player.v2\",\"slot\":N,\"role\":\"keeper\"|\"runner\",\"maxTicks\":int}. The player registers with {\"type\":\"prompt\",\"prompt\":str,\"scripted\":str|bool,\"external\":bool}; external=true selects ordinary player decisions, with scripted=false. For each active external seat the game sends {\"type\":\"turn\",\"tick\":N,\"system\":str,\"user\":str,\"candidates\":[{\"id\":str,\"action\":object}]}. The private system and user strings are the exact game-owned observation and policy prompt. The player replies {\"type\":\"decision\",\"tick\":N,\"action\":object}. A keeper action is {\"transmit\":bool,\"message\":str,\"notes\":str}; a runner action is {\"move\":\"N\"|\"S\"|\"E\"|\"W\"|\"WAIT\",\"notes\":str}. The game parses each action, resolves simultaneous decisions and sends {\"type\":\"decision_result\",\"tick\":N,\"accepted\":bool}. A missing response uses the role-specific scripted fallback and is not accepted as a player decision. The game also sends redacted state frames after ticks and {\"type\":\"final\",\"scores\":[4],\"roles\":[4],\"ticks\":int,\"reason\":str} at episode end. Existing prompt and scripted registrations remain available for the bundled players. Only the game owns hidden information, legality, scoring and replay."
+        "value": "lighthouse.player.v3 - JSON text frames over COWORLD_PLAYER_WS_URL. Slot 0 is the keeper; slots 1-3 are runners. The game sends welcome with slot, alias, role and maxTicks. Every active seat receives {\"type\":\"turn\",\"tick\":N,\"view\":{...}}. The keeper view includes its alias and notes, full maze, exit, uncollected keys, runner aliases/status/positions/keys/last moves/bumps, tide clock, messages, and public key state. A runner sees only its alias, notes, three-by-three window, held and team keys, gate state, keeper inbox and standing order, and its own move history. The player replies {\"type\":\"decision\",\"tick\":N,\"source\":\"player\"|\"scripted\",\"action\":{...}}. Keeper actions contain transmit, message, notes; runner actions contain move (N/S/E/W/WAIT), notes. The game parses each action, resolves simultaneous turns, and sends decision_result with accepted. Missing or invalid actions use the game-owned scripted fallback. State frames remain redacted; final includes scores, roles, ticks and reason. Policy prompts, model calls, and candidate selection stay in the player. The game owns hidden state, legality, scoring and replay."
       },
       "global": {
         "type": "text",
@@ -280,7 +267,7 @@
     "docs": {
       "readme": {
         "type": "text",
-        "value": "Lighthouse is a cooperative maze game about grounded instruction-following across an information asymmetry. One cog - the keeper - sees the whole maze and cannot move. Three blind runners see a 3x3 window and must gather three keys and reach the single exit before the tide, which rises from the bottom and never recedes. The keeper may transmit one short message per tick; it lands at the start of the next tick, and it costs the team an extra unit of tide. Silence is the only way to buy time, so the keeper must say only what changes what a runner will do. Everyone shares one score: keys collected, runners out, and a time bonus for getting all three out with the clock still low. The bundled prompt player uses PLAYER_PROMPT. Ordinary player policies receive private turns and submit keeper or runner actions over the same player socket; Jev runs inside such a player. With no LLM credentials (or for seats that register scripted) the server plays the lantern and wallhug baselines, so episodes always complete."
+        "value": "Lighthouse is a cooperative maze game about grounded instruction-following across an information asymmetry. One cog - the keeper - sees the whole maze and cannot move. Three blind runners see a 3x3 window and must gather three keys and reach the single exit before the tide, which rises from the bottom and never recedes. The keeper may transmit one short message per tick; it lands at the start of the next tick, and it costs the team an extra unit of tide. Silence is the only way to buy time, so the keeper must say only what changes what a runner will do. Everyone shares one score: keys collected, runners out, and a time bonus for getting all three out with the clock still low. The bundled prompt player uses PLAYER_PROMPT. Ordinary player policies receive private turns and submit keeper or runner actions over the same player socket; Jev runs inside such a player. Bundled scripted players compute lantern and wallhug decisions from their private observations. A credential-free prompt player chooses the same baseline; the game retains it only as the missed-action fallback."
       },
       "pages": [
         {
@@ -299,11 +286,14 @@
       "id": "lighthouse-player",
       "name": "Lighthouse Prompt Player",
       "type": "player",
-      "description": "The reference Lighthouse policy: delivers its PLAYER_PROMPT (or a default keeper/runner strategy) to the game and spectates until the final frame. The same prompt must work in either role, because the platform may seat it anywhere. Field your own policy by uploading this image with a different PLAYER_PROMPT.",
+      "description": "The reference Lighthouse policy: calls Claude from its player container using PLAYER_PROMPT (or a default strategy) and its private observation. The same prompt must work in either role, because the platform may seat it anywhere. Field your own policy by uploading this image with a different PLAYER_PROMPT.",
       "image": "{{LIGHTHOUSE_IMAGE}}",
       "run": [
         "/bin/lighthouse-player"
       ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/lighthouse/anthropic_api_key"
+      },
       "resources": {
         "requests": {
           "cpu": "100m",
@@ -319,7 +309,7 @@
       "id": "lighthouse-lantern",
       "name": "Lighthouse Scripted Lantern",
       "type": "player",
-      "description": "The scripted KEEPER baseline as a fieldable policy: shortest-path orders for every runner, transmitted on a rhythm that pays the tide cost on purpose. Dealt a runner slot it plays wallhug instead, so it never strands an episode.",
+      "description": "The scripted KEEPER baseline as a fieldable player policy: shortest-path orders from its private keeper view, transmitted on a rhythm that pays the tide cost on purpose. Dealt a runner slot it plays wallhug instead, so it never strands an episode.",
       "image": "{{LIGHTHOUSE_IMAGE}}",
       "run": [
         "/bin/lighthouse-player"
@@ -342,7 +332,7 @@
       "id": "lighthouse-wallhug",
       "name": "Lighthouse Scripted Wallhug",
       "type": "player",
-      "description": "The scripted RUNNER baseline as a fieldable policy: obey the keeper's last order for your alias while it is open, otherwise turn to the nearest open direction, otherwise follow the left-hand wall. Dealt the keeper slot it plays lantern instead.",
+      "description": "The scripted RUNNER baseline as a fieldable player policy: obey the keeper's last order for your alias while it is open, otherwise turn to the nearest open direction, otherwise follow the left-hand wall. Dealt the keeper slot it plays lantern instead.",
       "image": "{{LIGHTHOUSE_IMAGE}}",
       "run": [
         "/bin/lighthouse-player"

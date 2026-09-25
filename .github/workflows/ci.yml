@@ -32,6 +32,29 @@ env:
   NIM_VERSION: "2.2.4"
 
 jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build local Coworld bundle
+        run: |
+          set -euo pipefail
+          uvx --from 'coworld[auth]==0.1.43' coworld build \
+            --version 0.0.0 --project . --compose compose.yaml \
+            --template coworld_manifest_template.json \
+            --output dist/coworld_manifest.json
+
+      - name: Certify ordinary roster locally
+        run: |
+          set -euo pipefail
+          uvx --from 'coworld[auth]==0.1.43' coworld certify \
+            dist/coworld_manifest.json --no-open-report \
+            --timeout-seconds 300
+
   # ---------------------------------------------------------------------
   # Native Nim tests. Same nimby recipe as the Dockerfile build stage, so a
   # green test job means the image's compiler and package tree agree.
@@ -153,6 +176,21 @@ jobs:
             -o:/tmp/lighthouse-train-bridge tools/train_bridge.nim
           python3 tools/test_training.py /tmp/lighthouse-posttrain \
             /tmp/lighthouse-train-bridge
+
+      - name: Compare ordinary-player baselines with native rules
+        run: python3 tools/test_policy_view.py
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Native mixed player episode
+        run: |
+          nim c --hints:off -d:release --path:src \
+            -o:/tmp/lighthouse-game src/lighthouse.nim
+          nim c --hints:off -d:release --path:src \
+            -o:/tmp/lighthouse-player src/lighthouse_player.nim
+          uv run --no-project --with websocket-client==1.8.0 python \
+            tools/ci/player_policy_smoke.py /tmp/lighthouse-game \
+            /tmp/lighthouse-player
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs

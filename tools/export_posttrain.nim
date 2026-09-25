@@ -1,7 +1,7 @@
 ## Export complete native episodes with the exact hosted prompts and replies.
 
 import std/[json, os, osproc, strutils]
-import lighthouse/[sim, llm]
+import lighthouse/[sim, rules, player_policy]
 
 when isMainModule:
   let args = commandLineParams()
@@ -42,6 +42,7 @@ when isMainModule:
         scripted: array[Seats, bool]
       for seat in seats:
         let decision = scriptedAction(game, seat, skAuto)
+        let prompts = promptsFromView(game.seatDecisionView(seat), "")
         let completion = decisionJson(seat, decision)
         let accepted = parseReply(seat, completion)
         doAssert accepted.move == decision.move
@@ -52,8 +53,8 @@ when isMainModule:
           "seed": "lighthouse-" & variant & "-" & $seed,
           "decision_id": rows.len,
           "prompt": [
-            {"role": "system", "content": systemPrompt(game, seat)},
-            {"role": "user", "content": userPrompt(game, seat, "")}
+            {"role": "system", "content": prompts.system},
+            {"role": "user", "content": prompts.user}
           ],
           "completion": [{"role": "assistant", "content": $completion}],
           "game": "lighthouse",

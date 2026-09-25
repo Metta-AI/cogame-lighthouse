@@ -1,7 +1,7 @@
 ## JSONL numeric bridge over the native Lighthouse simulator.
 
 import std/[hashes, json, os, strutils]
-import lighthouse/[sim, llm]
+import lighthouse/[sim, rules, player_policy]
 
 var
   game: Sim
@@ -13,8 +13,9 @@ var
 
 proc currentDecision(): JsonNode =
   let seat = game.pendingSeats()[cursor]
-  let system = systemPrompt(game, seat)
-  let user = userPrompt(game, seat, "")
+  let prompts = promptsFromView(game.seatDecisionView(seat), "")
+  let system = prompts.system
+  let user = prompts.user
   %*{"kind": "decision", "game": "lighthouse",
     "decision_id": decisionId, "seat": seat, "engine_seat": seat,
     "turn": game.tick,

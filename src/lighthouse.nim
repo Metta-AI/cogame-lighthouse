@@ -43,6 +43,5 @@ when isMainModule:
     echo "lighthouse: seats=", config.players.len,
       " maxTicks=", config.maxTicks,
       " board=", config.width, "x", config.height,
-      " keys=", config.keyCount,
-      " model=", config.model
+      " keys=", config.keyCount
     runGameServer(config, runtimeConfig)

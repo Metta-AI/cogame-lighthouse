@@ -5,7 +5,7 @@
 ## team, or a champion prompt has nothing to beat.
 
 import std/[json, monotimes, times, unicode, unittest]
-import lighthouse/[llm, sim]
+import lighthouse/[rules, player_policy, sim]
 
 const Seeds = [1, 7, 42, 1234]
 
@@ -52,6 +52,9 @@ proc playScripted(config: GameConfig): Tally =
           result.sim.names[index + 1])
     for seat in seats:
       let decision = scriptedAction(result.sim, seat, skAuto)
+      let playerDecision = scriptedActionFromView(
+        result.sim.seatDecisionView(seat))
+      check decisionJson(seat, playerDecision) == decisionJson(seat, decision)
       check decision.scripted
       check decision.notes.len == 0
       scripted[seat] = true
@@ -178,30 +181,9 @@ suite "role substitution":
     check runnerSeatAsLantern.message.len == 0
 
 suite "no credentials":
-  test "decideAll is pure scripted with no LLM env":
-    ## The offline certification path: no credentials means no network at
-    ## all, not a slow retry loop.
-    let config = fixture(3, maxTicks = 8)
-    let client = newLlmClient(config)
+  test "a credential-free prompt player selects the scripted policy":
+    let client = newLlmClient("claude-sonnet-5", 900, 18)
     check client.disabled
-    var sim = initSim(config)
-    let seats = sim.pendingSeats()
-    var prompts = newSeq[string](Seats)
-    prompts[0] = "talk a lot"
-    var registered = newSeq[ScriptKind](Seats)
-    let started = getMonoTime()
-    let decisions = client.decideAll(sim, seats, prompts, registered)
-    let elapsed = (getMonoTime() - started).inMilliseconds
-    check elapsed < 1000
-    check decisions.len == seats.len
-    for index, seat in seats:
-      check decisions[index].scripted
-      let expected = scriptedAction(sim, seat, skAuto)
-      if seat == KeeperSeat:
-        check decisions[index].message == expected.message
-        check decisions[index].transmit == expected.transmit
-      else:
-        check decisions[index].move == expected.move
 
 suite "reply parsing":
   test "runner moves parse tolerantly and reject anything else":

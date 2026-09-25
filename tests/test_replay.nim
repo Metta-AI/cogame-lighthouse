@@ -6,7 +6,7 @@
 ## the wasm viewer exports, compiled natively here.
 
 import std/[json, unicode, unittest]
-import lighthouse/[llm, sim]
+import lighthouse/[rules, sim]
 import "../replay-viewer/lighthouse_replay"
 
 const MultiByte = ["\u2264", "\u2192", "\U0001F30A", "\u00E9", "\u6C34"]
