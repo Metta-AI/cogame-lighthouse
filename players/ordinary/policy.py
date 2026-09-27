@@ -206,24 +206,3 @@ def baseline(view: dict) -> dict:
     return (
         _keeper_baseline(view) if view["role"] == "keeper" else _runner_baseline(view)
     )
-
-
-def candidates(view: dict) -> list[dict]:
-    first = baseline(view)
-    if view["role"] == "keeper":
-        actions = [first]
-        speak = {"transmit": True, "message": first["message"], "notes": ""}
-        quiet = {"transmit": False, "message": "", "notes": ""}
-        for action in (speak, quiet):
-            if action not in actions and (not action["transmit"] or action["message"]):
-                actions.append(action)
-        return actions
-    actions = [first]
-    for direction, (dx, dy) in DELTAS.items():
-        if view["window"][dy + 1][dx + 1] not in "#~":
-            action = {"move": direction, "notes": ""}
-            if action not in actions:
-                actions.append(action)
-    if {"move": "WAIT", "notes": ""} not in actions:
-        actions.append({"move": "WAIT", "notes": ""})
-    return actions

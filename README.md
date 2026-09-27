@@ -26,7 +26,7 @@ three keys are in.
 
 Every tick the game sends each seat a private structured observation — the
 whole map for the keeper, a 3 × 3 window plus the keeper's last words for a
-runner. Prompt, scripted, Jev, and trained policies build their own decisions
+runner. Prompt, scripted, and trained policies build their own decisions
 and submit complete role actions over the same player websocket. The game
 resolves all four decisions together.
 
@@ -114,9 +114,8 @@ note's §Tests passes as written; none was weakened.
 
 The bundled prompt player uses `/bin/lighthouse-player` and `PLAYER_PROMPT`
 inside its own container. The separate `Dockerfile.ordinary-player` runs
-canned or Jev decisions over the same seat socket. A trained image needs its base model, adapter,
-PyTorch, Transformers, and PEFT packaged locally. Set `LIGHTHOUSE_JEV=1`
-for Jev or `LIGHTHOUSE_ADAPTER_DIR` for a trained image. Set
+canned decisions over the same seat socket. A trained image needs its base model, adapter,
+PyTorch, Transformers, and PEFT packaged locally. Set `LIGHTHOUSE_ADAPTER_DIR` for a trained image. Set
 `LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` to capture
 accepted decisions in the standard player artifact. See
 [training](docs/TRAINING.md) for collection and export.
