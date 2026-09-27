@@ -3,8 +3,7 @@
 ## Ordinary player collection
 
 Build `Dockerfile.ordinary-player` and seat it through the normal Coworld
-player socket. `LIGHTHOUSE_JEV=1` selects Jev through the System One sidecar;
-without it, the policy chooses the role-specific scripted candidate.
+player socket. The default policy chooses the role-specific scripted action.
 `LIGHTHOUSE_ADAPTER_DIR` selects a trained adapter when the player image
 also packages its base model, PyTorch, Transformers, and PEFT. The keeper
 sends `transmit`, `message`, and `notes`; runners send `move` and `notes`.

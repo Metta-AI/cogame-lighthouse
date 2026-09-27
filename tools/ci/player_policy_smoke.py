@@ -1,4 +1,4 @@
-"""One native Lighthouse game with Jev, prompt, and scripted player processes."""
+"""One native Lighthouse game with canned, prompt, and scripted player processes."""
 
 import json
 import os
@@ -21,22 +21,10 @@ class ModelStub(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         slot = self.headers["X-Coworld-Player-Slot"]
         self.calls.append((self.path, slot))
-        if self.path == "/v1/systemone":
-            choices = len(request["questions"]["action"]["criteria"])
-            selected = 1 if choices > 1 else 0
-            probabilities = {
-                str(index): float(index == selected) for index in range(choices)
-            }
-            payload = {
-                "answers": {
-                    "action": {"type": "choice", "probabilities": probabilities}
-                }
-            }
-        else:
-            assert self.path.startswith("/model/") and self.path.endswith("/invoke")
-            payload = {
-                "content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]
-            }
+        assert self.path.startswith("/model/") and self.path.endswith("/invoke")
+        payload = {
+            "content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]
+        }
         data = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -122,7 +110,6 @@ def main() -> None:
                 if seat < 2:
                     env["AWS_ENDPOINT_URL_BEDROCK_RUNTIME"] = stub_url
                 if seat == 0:
-                    env["LIGHTHOUSE_JEV"] = "1"
                     argv = [
                         sys.executable,
                         str(Path(__file__).parents[2] / "players/ordinary/player.py"),
@@ -146,12 +133,10 @@ def main() -> None:
             assert results["ticks"] == 6 and replay["events"]
             game_text = (work / "game.log").read_text()
             assert "using scripted fallback" not in game_text
-            jev = [call for call in ModelStub.calls if call[0] == "/v1/systemone"]
             prompt = [call for call in ModelStub.calls if call[0].startswith("/model/")]
-            assert len(jev) == 6 and all(slot == "0" for _, slot in jev)
             assert len(prompt) == 6 and all(slot == "1" for _, slot in prompt)
             print(
-                "mixed episode: 6 Jev, 6 prompt, 12 scripted decisions; zero game fallback"
+                "mixed episode: 6 canned, 6 prompt, 12 scripted decisions; zero game fallback"
             )
         finally:
             for process in processes:
