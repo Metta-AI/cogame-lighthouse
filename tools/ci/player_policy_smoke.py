@@ -21,7 +21,7 @@ class ModelStub(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         slot = self.headers["X-Coworld-Player-Slot"]
         self.calls.append((self.path, slot))
-        assert self.path.startswith("/model/") and self.path.endswith("/invoke")
+        assert self.path == "/v1/messages"
         payload = {
             "content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]
         }
@@ -66,7 +66,7 @@ def main() -> None:
         for key in (
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_API_KEY_URI",
-            "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+            "COWORLD_LLM_ENDPOINT",
             "AWS_BEARER_TOKEN_BEDROCK",
         ):
             game_env.pop(key, None)
@@ -108,7 +108,7 @@ def main() -> None:
                     f"ws://127.0.0.1:{game_port}/player?slot={seat}&token=t{seat}"
                 )
                 if seat < 2:
-                    env["AWS_ENDPOINT_URL_BEDROCK_RUNTIME"] = stub_url
+                    env["COWORLD_LLM_ENDPOINT"] = stub_url
                 if seat == 0:
                     argv = [
                         sys.executable,
@@ -133,7 +133,7 @@ def main() -> None:
             assert results["ticks"] == 6 and replay["events"]
             game_text = (work / "game.log").read_text()
             assert "using scripted fallback" not in game_text
-            prompt = [call for call in ModelStub.calls if call[0].startswith("/model/")]
+            prompt = [call for call in ModelStub.calls if call[0] == "/v1/messages"]
             assert len(prompt) == 6 and all(slot == "1" for _, slot in prompt)
             print(
                 "mixed episode: 6 canned, 6 prompt, 12 scripted decisions; zero game fallback"

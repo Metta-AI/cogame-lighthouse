@@ -291,9 +291,7 @@
       "run": [
         "/bin/lighthouse-player"
       ],
-      "env": {
-        "ANTHROPIC_API_KEY_URI": "secret://coworld/lighthouse/anthropic_api_key"
-      },
+      "env": {},
       "resources": {
         "requests": {
           "cpu": "100m",
