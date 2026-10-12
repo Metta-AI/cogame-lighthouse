@@ -22,9 +22,7 @@
       "run": [
         "/bin/lighthouse"
       ],
-      "env": {
-        "ANTHROPIC_API_KEY_URI": "secret://coworld/lighthouse/anthropic_api_key"
-      },
+      "env": {},
       "source_url": "https://github.com/Metta-AI/cogame-lighthouse/tree/main"
     },
     "config_schema": {
