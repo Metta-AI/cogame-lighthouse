@@ -57,6 +57,7 @@ def main():
         "--variant", choices=("standard", "spring-tide"), default="standard"
     )
     parser.add_argument("--wording", default="canonical")
+    parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
         "--roster", choices=("native", "ordinary", "mixed"), default="native"
     )
@@ -71,7 +72,7 @@ def main():
         v["game_config"] for v in manifest["variants"] if v["id"] == args.variant
     )
     config.update(
-        seed=7,
+        seed=args.seed,
         promptVariant=args.wording,
         promptSeed=3,
         tokens=[f"t{i}" for i in range(4)],
@@ -174,7 +175,9 @@ def main():
         for seat in range(4):
             expected_ticks = {tick for tick, slot in views if slot == seat}
             if seat in ordinary:
-                with zipfile.ZipFile(output / f"policy_artifact_{seat}.zip") as archive:
+                artifact = output / f"policy_artifact_{seat}.zip"
+                assert artifact.stat().st_mode & 0o777 == 0o600
+                with zipfile.ZipFile(artifact) as archive:
                     trajectory = json.loads(archive.read("trajectory.json"))
                 assert (
                     trajectory["complete"] and trajectory["scores"] == result["scores"]

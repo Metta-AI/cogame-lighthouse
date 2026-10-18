@@ -92,6 +92,7 @@ def main() -> None:
                     source,
                     frame["tick"],
                     PromptSelection.model_validate(turn["prompt_configuration"]),
+                    os.environ.get("PLAYER_PROMPT", ""),
                 )
         elif kind == "final":
             if pending:

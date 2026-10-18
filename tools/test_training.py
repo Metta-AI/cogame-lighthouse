@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TextIO, cast
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,13 +102,14 @@ with tempfile.TemporaryDirectory() as directory:
                 bufsize=1,
                 cwd="/tmp",
             )
-            assert process.stdin is not None and process.stdout is not None
+            stdin = cast(TextIO, process.stdin)
+            stdout = cast(TextIO, process.stdout)
             rng = random.Random(13)
 
             def request(payload: dict) -> dict:
-                process.stdin.write(json.dumps(payload) + "\n")
-                process.stdin.flush()
-                return json.loads(process.stdout.readline())
+                stdin.write(json.dumps(payload) + "\n")
+                stdin.flush()
+                return json.loads(stdout.readline())
 
             try:
                 observation = request(
@@ -147,6 +149,6 @@ with tempfile.TemporaryDirectory() as directory:
                 )
                 print(variant, "teacher" if teacher else "random", decisions)
             finally:
-                process.stdin.close()
-                process.stdout.close()
+                stdin.close()
+                stdout.close()
                 assert process.wait(timeout=5) == 0

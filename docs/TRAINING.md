@@ -36,17 +36,25 @@ sends `transmit`, `message`, and `notes`; runners send `move` and `notes`.
 All actions pass through the game's existing parser and tick resolver.
 
 Set `LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` on the
-player to upload accepted decisions. Export at least two complete seed runs:
+player to upload schema-2 accepted-decision archives. Local files have owner-only
+permissions. Also enable host evidence with `LIGHTHOUSE_CAPTURE_DIR`; keep its
+`host.jsonl` under each run's `private/` directory alongside config, results, and replay.
+Export at least ten complete seed families:
 
 ```sh
-python3 players/ordinary/export.py /tmp/lighthouse-dataset \
-  /tmp/lighthouse-run-14 /tmp/lighthouse-run-15 \
-  --source-revision <game-source-sha> --source canned
+python3 players/ordinary/export.py /tmp/lighthouse-candidates \
+  /tmp/lighthouse-run-{1..10} \
+  --source-revision <game-source-sha> --replay-verifier /tmp/lighthouse-replay
 ```
 
-The exporter splits by whole seed, rejects deadline endings and mismatched
-source revisions, and accepts the game's `complete` and `timeup` endings.
-The output uses `lighthouse-reply-v1`, matching the native exporter below.
+The exporter verifies source identity, actual private views, prompt hashes, received
+frames, resolved actions, and complete replay events. It rejects held-out wording,
+deadline endings, and incomplete decision coverage. It emits private review-required
+candidates, not training splits. Canned decisions are teachers; adapter decisions
+have unknown origin because these archives do not retain model-generation evidence.
+The shared importer owns review, admission, and scenario-family splits. Older schema-1
+archives lack operator guidance and cannot qualify through this exporter; recollect
+those runs without modifying retained archives.
 
 The native source exporter plays at least ten complete episodes per certified variant.
 It records prompts built from each private view and scripted replies passed through
@@ -78,7 +86,8 @@ replies and keeper messages.
 
 ```sh
 nim c -d:release --path:src -o:/tmp/lighthouse-train-bridge tools/train_bridge.nim
-python3 tools/test_training.py /tmp/lighthouse-posttrain /tmp/lighthouse-train-bridge
+nim c -d:release --path:src -o:/tmp/lighthouse-replay tools/check_replay.nim
+python3 tools/test_training.py /tmp/lighthouse-posttrain /tmp/lighthouse-train-bridge /tmp/lighthouse-replay
 ```
 
 From a Metta checkout with the Coworld training stack, pass absolute

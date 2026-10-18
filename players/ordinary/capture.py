@@ -29,9 +29,11 @@ class Capture:
         source: str,
         tick: int,
         selection: PromptSelection,
+        guidance: str,
     ) -> None:
         self.rows.append(
             {
+                "guidance": guidance,
                 "prompt_template": selection.metadata(system, user),
                 "decision_id": len(self.rows),
                 "tick": tick,
@@ -53,7 +55,7 @@ class Capture:
                 "trajectory.json",
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "game": "lighthouse",
                         "slot": self.slot,
                         "backend": self.backend,
@@ -70,7 +72,10 @@ class Capture:
         if url.scheme == "file":
             target = Path(unquote(url.path))
             pending = target.with_name(target.name + ".tmp")
-            pending.write_bytes(data)
+            with os.fdopen(
+                os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb"
+            ) as destination:
+                destination.write(data)
             os.replace(pending, target)
         else:
             request = urllib.request.Request(
