@@ -1,5 +1,9 @@
 ## Private evidence artifacts: exclusive creation, no spectator publication.
-import std/[json, os, posix]
+import std/[json, os, posix, strutils]
+
+const
+  LighthouseSourceRevision* = staticExec("git rev-parse HEAD").strip()
+  LighthouseSourceDirty* = staticExec("git status --porcelain").strip().len > 0
 
 proc writePrivate*(destination, content: string) =
   let parent = destination.parentDir()

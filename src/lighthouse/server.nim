@@ -620,8 +620,8 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   if captureDirectory.len > 0:
     state.capturePath = captureDirectory / "host.jsonl"
     writePrivate(state.capturePath, $(%*{"event_type": "host_started", "visibility": "private",
-      "source_revision": staticExec("git rev-parse HEAD").strip(),
-      "source_dirty": staticExec("git status --porcelain").strip().len > 0,
+      "source_revision": LighthouseSourceRevision,
+      "source_dirty": LighthouseSourceDirty,
       "config": parseJson(runtimeConfig.config),
       "prompt_selection": state.selection.selectionMetadata()}) & "\n")
   state.config = config

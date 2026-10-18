@@ -66,8 +66,8 @@ when isMainModule:
       if captureDirectory.len > 0:
         trace = captureDirectory / ("player-" & $slot & ".jsonl")
         writePrivate(trace, $(%*{"event_type": "player_started", "visibility": "private",
-          "seat": slot, "source_revision": staticExec("git rev-parse HEAD").strip(),
-          "source_dirty": staticExec("git status --porcelain").strip().len > 0}) & "\n")
+          "seat": slot, "source_revision": LighthouseSourceRevision,
+          "source_dirty": LighthouseSourceDirty}) & "\n")
       echo "lighthouse player: seated at slot ", slot,
         " as ", payload["name"].getStr(),
         " (", payload["role"].getStr(), ")"
