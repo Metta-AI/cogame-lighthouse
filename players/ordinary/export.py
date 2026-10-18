@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from policy import prompts
+from policy import baseline, prompts
 from prompt_selection import PromptSelection
 
 
@@ -79,7 +79,18 @@ def export(runs: list[Path], output: Path, revision: str, verifier: Path) -> Non
             or completed["result"] != result
             or result["reason"] not in ("complete", "timeup")
             or replay["results"] != result
-            or replay["seed"] != config["seed"]
+            or any(
+                replay["config"][key] != config[key]
+                for key in (
+                    "seed",
+                    "maxTicks",
+                    "width",
+                    "height",
+                    "tideDelay",
+                    "tidePeriod",
+                    "keyCount",
+                )
+            )
         ):
             raise ValueError("incomplete or unqualified host capture")
         selection = PromptSelection.model_validate(started["prompt_selection"])
@@ -90,6 +101,10 @@ def export(runs: list[Path], output: Path, revision: str, verifier: Path) -> Non
         ]:
             raise ValueError("host application log differs from replay")
         subprocess.run([verifier, run / "replay.json"], check=True)
+        ticks = {e["tick"]: e for e in replay["events"] if e["kind"] == "tick"}
+        transmissions = {
+            e["tick"]: e["text"] for e in replay["events"] if e["kind"] == "say"
+        }
         views, resolved, frames = {}, {}, {}
         for event in events:
             if event["event_type"] in ("observation", "decision_resolved"):
@@ -150,6 +165,10 @@ def export(runs: list[Path], output: Path, revision: str, verifier: Path) -> Non
                     raise ValueError("prompt wording, private view or hashes differ")
                 response = row.completion[0].content
                 action = json.loads(response)
+                if row.source == "canned" and action != baseline(view):
+                    raise ValueError(
+                        "canned action differs from the private-view teacher"
+                    )
                 if (
                     frames[key]["action"] != action
                     or frames[key]["source"] != row.source
@@ -163,6 +182,15 @@ def export(runs: list[Path], output: Path, revision: str, verifier: Path) -> Non
                     or action != resolved[key]["action"]
                 ):
                     raise ValueError("player capture differs from resolved action")
+                if action["notes"] != ticks[row.tick]["notes"][seat]:
+                    raise ValueError("private notes differ from the replay")
+                if seat == 0:
+                    if action["transmit"] != (row.tick in transmissions) or action[
+                        "message"
+                    ] != (transmissions[row.tick] if row.tick in transmissions else ""):
+                        raise ValueError("transmission differs from the replay")
+                elif action["move"] != ticks[row.tick]["moves"][seat - 1]:
+                    raise ValueError("runner move differs from the replay")
                 identity = str(len(records))
                 attempt_id = identity + "-player"
                 records.append(
