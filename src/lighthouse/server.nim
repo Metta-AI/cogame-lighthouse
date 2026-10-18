@@ -21,7 +21,7 @@
 ##   player -> game: {"type":"decision","tick":N,"action":{...}}
 ##                   {"type":"decision_result","tick":N,"accepted":bool}
 
-import lighthouse/prompts
+import lighthouse/[prompts, evidence]
 
 import
   std/[json, locks, os, sets, strutils, tables, times],
@@ -37,6 +37,7 @@ const
 
 type
   GameState = object
+    capturePath: string
     selection: PromptSelection
     config: GameConfig
     sim: Sim
@@ -318,6 +319,10 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         state.pendingTick = simCopy.tick
         state.pendingDecisions.clear()
         for seat in seats:
+          if state.capturePath.len > 0:
+            appendPrivate(state.capturePath, %*{"event_type": "observation", "visibility": "private",
+              "seat": seat, "tick": simCopy.tick, "view": simCopy.seatDecisionView(seat),
+              "prompt_selection": state.selection.selectionMetadata()})
           if state.playerSockets.hasKey(seat):
             state.playerSockets[seat].send($ %*{
               "type": "turn",
@@ -365,6 +370,13 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             moves[seat - 1] = decision.move
             echo "lighthouse: ", state.sim.names[seat], " moves ",
               $decision.move
+        if state.capturePath.len > 0:
+          for index, seat in seats:
+            appendPrivate(state.capturePath, %*{"event_type": "decision_resolved", "visibility": "private",
+              "seat": seat, "tick": simCopy.tick,
+              "received": state.pendingDecisions.hasKey(seat),
+              "action": decisionJson(seat, decisions[index]), "scripted": decisions[index].scripted})
+        let firstEvent = state.sim.events.len
         var applied = true
         try:
           state.sim.applyTick(spoke, message, moves, notes, scriptedFlags)
@@ -372,6 +384,10 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           echo "lighthouse: tick rejected (", error.msg, "); ending early"
           state.sim.endEarly()
           applied = false
+        if state.capturePath.len > 0:
+          for index in firstEvent ..< state.sim.events.len:
+            appendPrivate(state.capturePath, %*{"event_type": "action_applied", "visibility": "private",
+              "event": state.sim.events[index].eventToJson()})
         state.broadcastLocked()
         for seat in seats:
           if state.playerSockets.hasKey(seat):
@@ -387,6 +403,10 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
     ## Let the last tick land before the final frame.
     if config.turnDelayMs > 0:
       sleep(config.turnDelayMs)
+    withLock stateLock:
+      if state.capturePath.len > 0:
+        appendPrivate(state.capturePath, %*{"event_type": "host_completed", "visibility": "private",
+          "result": state.sim.resultsJson()})
     finishEpisode(runtimeConfig)
 
 var gameThread: Thread[RuntimeConfig]
@@ -501,6 +521,9 @@ proc websocketHandler(
       var slot = -1
       withLock stateLock:
         slot = state.socketSlots.getOrDefault(websocket, -1)
+        if slot >= 0 and state.capturePath.len > 0:
+          appendPrivate(state.capturePath, %*{"event_type": "player_frame", "visibility": "private",
+            "seat": slot, "pending_tick": state.pendingTick, "frame": message.data})
       if slot < 0:
         return
       try:
@@ -593,6 +616,14 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   if config.tokens.len != config.players.len:
     raise newException(LighthouseError, "tokens and players must align")
   state.selection = promptSelection(parseJson(runtimeConfig.config))
+  let captureDirectory = getEnv("LIGHTHOUSE_CAPTURE_DIR")
+  if captureDirectory.len > 0:
+    state.capturePath = captureDirectory / "host.jsonl"
+    writePrivate(state.capturePath, $(%*{"event_type": "host_started", "visibility": "private",
+      "source_revision": staticExec("git rev-parse HEAD").strip(),
+      "source_dirty": staticExec("git status --porcelain").strip().len > 0,
+      "config": parseJson(runtimeConfig.config),
+      "prompt_selection": state.selection.selectionMetadata()}) & "\n")
   state.config = config
   state.sim = initSim(config)
   state.pendingTick = -1

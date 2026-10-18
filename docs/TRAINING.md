@@ -19,6 +19,13 @@ source exports reject them. Private metadata hashes the actual rendered messages
 The bridge's `--language` mode accepts full role actions, including private notes;
 numeric observations and action choices are unchanged.
 
+`LIGHTHOUSE_CAPTURE_DIR` enables private host and bundled-player JSONL evidence.
+The host records private observations, received frames, resolved actions, and applied
+events. The bundled player records actual request bodies, responses, parsed actions,
+and acknowledgements. Interrupted or rejected calls retain only evidence that occurred;
+provider authorization headers are excluded. These diagnostic traces are not automatically
+admitted to training.
+
 ## Ordinary player collection
 
 Build `Dockerfile.ordinary-player` and seat it through the normal Coworld

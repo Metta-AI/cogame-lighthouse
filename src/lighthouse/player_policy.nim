@@ -6,7 +6,7 @@ import
   bitworld/runtime,
   curly,
   sim,
-  rules, prompts
+  rules, prompts, evidence
 export prompts
 
 const
@@ -452,7 +452,22 @@ proc choosePromptAction*(client: LlmClient, selection: PromptSelection, view: Js
   if client.transport == ltSidecar:
     request.headers["x-coworld-player-slot"] = $seat
   batch.post(request.url, request.headers, request.body, $seat)
+  let captureDirectory = getEnv("LIGHTHOUSE_CAPTURE_DIR")
+  let trace = captureDirectory / ("player-" & $seat & ".jsonl")
+  if captureDirectory.len > 0:
+    appendPrivate(trace, %*{"event_type": "request_sent", "visibility": "private",
+      "seat": seat, "tick": view["tick"], "view": view,
+      "request_body": request.body, "transport": $client.transport,
+      "prompt_template": selection.promptMetadata(prompts.system, prompts.user)})
   let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
+  if captureDirectory.len > 0:
+    appendPrivate(trace, %*{"event_type": "response_received", "visibility": "private",
+      "seat": seat, "tick": view["tick"], "response_body": responses[0].response.body,
+      "response_status": responses[0].response.code, "transport_error": responses[0].error})
   let answer = client.textOf(responses[0].response,
     responses[0].error, request.url)
-  parseReply(seat, extractJsonObject(answer))
+  result = parseReply(seat, extractJsonObject(answer))
+  if captureDirectory.len > 0:
+    appendPrivate(trace, %*{"event_type": "response_parsed", "visibility": "private",
+      "seat": seat, "tick": view["tick"], "response": answer,
+      "action": decisionJson(seat, result)})
