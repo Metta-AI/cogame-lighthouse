@@ -157,9 +157,9 @@ jobs:
               else
                 flags="--hints:off"
               fi
-              echo "::group::nim r ${flags} --path:src ${t}"
+              echo "::group::nim r --parallelBuild:1 ${flags} --path:src ${t}"
               # shellcheck disable=SC2086
-              if ! nim r ${flags} --path:src "${t}"; then
+              if ! nim r --parallelBuild:1 ${flags} --path:src "${t}"; then
                 echo "::error::FAILED (${m}) ${t}"
                 fail=1
               fi
@@ -170,9 +170,9 @@ jobs:
 
       - name: Exercise complete training matches
         run: |
-          nim c --hints:off -d:release --path:src \
+          nim c --parallelBuild:1 --hints:off -d:release --path:src \
             -o:/tmp/lighthouse-posttrain tools/export_posttrain.nim
-          nim c --hints:off -d:release --path:src \
+          nim c --parallelBuild:1 --hints:off -d:release --path:src \
             -o:/tmp/lighthouse-train-bridge tools/train_bridge.nim
           nim c --parallelBuild:1 -d:release --path:src -o:/tmp/lighthouse-replay tools/check_replay.nim
           python3 tools/test_training.py /tmp/lighthouse-posttrain \
@@ -186,13 +186,29 @@ jobs:
 
       - name: Native mixed player episode
         run: |
-          nim c --hints:off -d:release --path:src \
+          nim c --parallelBuild:1 --hints:off -d:release --path:src \
             -o:/tmp/lighthouse-game src/lighthouse.nim
-          nim c --hints:off -d:release --path:src \
+          nim c --parallelBuild:1 --hints:off -d:release --path:src \
             -o:/tmp/lighthouse-player src/lighthouse_player.nim
           uv run --no-project --with websocket-client==1.8.0 --with pydantic==2.12.5 python \
             tools/ci/player_policy_smoke.py /tmp/lighthouse-game \
             /tmp/lighthouse-player
+
+      - name: Complete ordinary games and reviewed candidate export
+        run: |
+          runs=()
+          for seed in {1..10}; do
+            output="$RUNNER_TEMP/lighthouse-ordinary-$seed"
+            uv run --no-project --with websocket-client==1.8.0 --with pydantic==2.12.5 python \
+              tools/test_native_prompts.py /tmp/lighthouse-game /tmp/lighthouse-player \
+              /tmp/lighthouse-replay "$output" --roster ordinary --seed "$seed" --wording mixed
+            runs+=("$output")
+          done
+          uv run --no-project --with pydantic==2.12.5 python tools/test_capture_candidates.py \
+            /tmp/lighthouse-replay "$(git rev-parse HEAD)" "${runs[@]}"
+          uv run --no-project --with websocket-client==1.8.0 --with pydantic==2.12.5 python \
+            tools/test_native_prompts.py /tmp/lighthouse-game /tmp/lighthouse-player \
+            /tmp/lighthouse-replay "$RUNNER_TEMP/lighthouse-heldout" --wording heldout-reference
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs

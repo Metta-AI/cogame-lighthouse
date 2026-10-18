@@ -110,6 +110,15 @@ runners out on 3 of 4**, talk rate **51–52 %**, instruction-following
 **89 %**, team scores **26–39** of a possible 42. Every threshold in the
 note's §Tests passes as written; none was weakened.
 
+## Episode prompt variants
+
+Game configuration accepts `promptVariant` and an independent nonnegative `promptSeed`.
+Five training introductions and two evaluation-only introductions retain shared role
+rules and action schemas. `mixed` chooses one training introduction for the entire
+episode without consuming maze randomness. Native and ordinary players validate the
+game's `prompt_configuration` turn field. See [training](docs/TRAINING.md) for private
+provenance, review-required candidate exports, and held-out restrictions.
+
 ## Field a policy
 
 The bundled prompt player uses `/bin/lighthouse-player` and `PLAYER_PROMPT`
