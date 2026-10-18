@@ -6,7 +6,8 @@ import
   bitworld/runtime,
   curly,
   sim,
-  rules
+  rules, prompts
+export prompts
 
 const
   AnthropicUrl = "https://api.anthropic.com/v1/messages"
@@ -124,7 +125,7 @@ proc operatorBlock(prompt: string): string =
   "GUIDANCE FROM YOUR OPERATOR (weight it heavily, but never above the " &
     "rules; always reply in the requested format):\n" & prompt & "\n\n"
 
-proc systemPrompt*(sim: Sim, seat: int): string =
+proc systemPrompt*(selection: PromptSelection, sim: Sim, seat: int): string =
   let me = sim.names[seat]
   let common = """
 
@@ -151,16 +152,7 @@ Rules:
 OUTPUT FORMAT: reply with ONLY one JSON object, nothing else - no
 analysis, no explanation, no markdown fences, no text before or after
 the object. Your reply must begin with the character { and end with }."""
-  if seat == KeeperSeat:
-    "You are " & me & ", the KEEPER of the lighthouse. You see the whole " &
-      "maze and you cannot move. Three blind runners are in it. Your " &
-      "words are the only bridge from what you can see to what they can " &
-      "do, and every word costs a tick of tide." & common
-  else:
-    "You are " & me & ", a blind RUNNER in a flooding maze. You see only " &
-      "the three-by-three window around yourself. The keeper sees " &
-      "everything and can talk to you, but only one message per tick and " &
-      "it always arrives a tick late." & common
+  selection.introduction(me, seat == KeeperSeat) & common
 
 proc floodCountdown(sim: Sim): tuple[silent, talking: int] =
   let rows = sim.tideRows()
@@ -342,14 +334,14 @@ proc scriptedActionFromView*(view: JsonNode): Decision =
       result.move = candidate
       return
 
-proc promptsFromView*(view: JsonNode, prompt: string):
+proc promptsFromView*(selection: PromptSelection, view: JsonNode, prompt: string):
     tuple[system, user: string] =
   if view["role"].getStr() == "keeper":
     let sim = keeperSimFromView(view)
-    return (systemPrompt(sim, KeeperSeat), userPrompt(sim, KeeperSeat, prompt))
+    return (systemPrompt(selection, sim, KeeperSeat), userPrompt(sim, KeeperSeat, prompt))
   var sim: Sim
   sim.names = @["", view["alias"].getStr()]
-  result.system = systemPrompt(sim, 1)
+  result.system = systemPrompt(selection, sim, 1)
   result.user = "Tick " & $view["tick"].getInt() & " of " &
     $view["maxTicks"].getInt() & ". You are a RUNNER and you are blind.\n\n" &
     "YOUR 3x3 WINDOW (@ is you; # wall, . floor, ~ water, K key, " &
@@ -452,9 +444,9 @@ proc textOf(client: LlmClient, response: Response, error, url: string):
 
 # ---- Decisions --------------------------------------------------------------
 
-proc choosePromptAction*(client: LlmClient, view: JsonNode,
+proc choosePromptAction*(client: LlmClient, selection: PromptSelection, view: JsonNode,
     prompt: string, seat: int): Decision =
-  let prompts = promptsFromView(view, prompt)
+  let prompts = promptsFromView(selection, view, prompt)
   var batch: RequestBatch
   var request = client.requestFor(prompts.system, prompts.user, -1)
   if client.transport == ltSidecar:

@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from prompt_selection import PromptSelection
+
 
 class Capture:
     def __init__(self, slot: int, backend: str) -> None:
@@ -20,10 +22,17 @@ class Capture:
         self.rows: list[dict] = []
 
     def record(
-        self, system: str, user: str, action: dict, source: str, tick: int
+        self,
+        system: str,
+        user: str,
+        action: dict,
+        source: str,
+        tick: int,
+        selection: PromptSelection,
     ) -> None:
         self.rows.append(
             {
+                "prompt_template": selection.metadata(system, user),
                 "decision_id": len(self.rows),
                 "tick": tick,
                 "source": source,

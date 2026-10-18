@@ -1,5 +1,24 @@
 # Lighthouse training
 
+## Episode wording
+
+Set `promptVariant` and `promptSeed` in game configuration or bridge resets.
+The `lighthouse-rules-v1` bank provides five training introductions: `canonical`,
+`plain`, `numbered`, `questions`, and `reordered`. `mixed` requires a nonnegative
+prompt seed and resolves modulo five once per episode, independently of maze randomness.
+Both native and ordinary Python players consume the game-owned selection and reject
+changes within an episode. Their existing prompt formats remain separate.
+
+Only the introduction varies. Shared role rules, private views, and reply schemas
+stay fixed. The native keeper description now correctly charges an extra tide tick
+per transmission; the previous text incorrectly charged each word. Other canonical
+prompt bytes remain unchanged.
+
+`heldout-briefing` and `heldout-reference` are evaluation-only. Training resets and
+source exports reject them. Private metadata hashes the actual rendered messages.
+The bridge's `--language` mode accepts full role actions, including private notes;
+numeric observations and action choices are unchanged.
+
 ## Ordinary player collection
 
 Build `Dockerfile.ordinary-player` and seat it through the normal Coworld
@@ -22,29 +41,23 @@ The exporter splits by whole seed, rejects deadline endings and mismatched
 source revisions, and accepts the game's `complete` and `timeup` endings.
 The output uses `lighthouse-reply-v1`, matching the native exporter below.
 
-The exporter plays ten complete native episodes per certified variant.
-It records the bundled player's system and user prompts built from each
-private view, plus replies accepted by the production parser. Decisions within a tick use the same
-simulator state, then the native simulator resolves them together. Train
-and validation sets split complete episodes by seed.
+The native source exporter plays at least ten complete episodes per certified variant.
+It records prompts built from each private view and scripted replies passed through
+the production parser. Decisions within a tick use the same simulator state, then
+the native simulator resolves them together. Every event and final score must
+rederive from the replay. Export requires clean, committed source.
 
 ```sh
 nim c -d:release --path:src -o:/tmp/lighthouse-posttrain tools/export_posttrain.nim
 /tmp/lighthouse-posttrain /tmp/lighthouse-data 10 standard
+# Optional wording and independent prompt seed:
+/tmp/lighthouse-posttrain /tmp/lighthouse-plain 10 spring-tide plain 0
 ```
 
-The other certified variant is `spring-tide`. The output has
-`train.jsonl`, `validation.jsonl`, and a manifest with source revision,
-seeds, ticks, scores, and row counts. Ten matches yielded 976/221
-standard and 797/214 spring-tide train/validation decisions.
-
-From a Metta checkout with the post-training package installed:
-
-```sh
-uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
-  --dataset /tmp/lighthouse-data --output /tmp/lighthouse-adapter \
-  --model Qwen/Qwen3-0.6B --max-steps 100 --max-length 4096
-```
+The output contains private canonical trajectories, per-episode replays, and a
+review-required manifest. The shared importer owns admission and dataset splits.
+All wording and game variants share `lighthouse-SEED` scenario families. Scripted
+source evidence does not establish hosted sampling parity or model quality.
 
 ## Numeric reinforcement learning
 

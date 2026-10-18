@@ -1,16 +1,32 @@
 """Player-side Lighthouse prompts and candidate actions from a private view."""
 
+from __future__ import annotations
+
 import json
 import re
 from collections import deque
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prompt_selection import PromptSelection
 
 DIRECTIONS = ("N", "E", "S", "W")
 DELTAS = {"N": (0, -1), "E": (1, 0), "S": (0, 1), "W": (-1, 0)}
 
 
-def prompts(view: dict, guidance: str) -> tuple[str, str]:
-    system = (
-        f"You are {view['alias']}, the {view['role']} in Lighthouse. "
+def prompts(selection: PromptSelection, view: dict, guidance: str) -> tuple[str, str]:
+    introductions = {
+        "canonical": "You are {alias}, the {role} in Lighthouse. ",
+        "plain": "In Lighthouse, you play {alias} in the {role} role. ",
+        "numbered": "1. Game: Lighthouse. 2. Alias: {alias}. 3. Role: {role}. ",
+        "questions": "Which game? Lighthouse. Who are you? {alias}. Your role? {role}. ",
+        "reordered": "Your role in Lighthouse is {role}; your alias is {alias}. ",
+        "heldout-briefing": "Lighthouse briefing: {alias} has the {role} role. ",
+        "heldout-reference": "Lighthouse identity record — alias: {alias}; role: {role}. ",
+    }
+    system = introductions[selection.variant].format(
+        alias=view["alias"], role=view["role"]
+    ) + (
         "The keeper sees the maze; runners see only their own 3x3 window. "
         "Collect all keys and reach the exit before the rising tide. "
         "A keeper transmission arrives next tick and doubles the tide clock "

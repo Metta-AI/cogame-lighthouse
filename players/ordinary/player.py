@@ -9,11 +9,12 @@ from urllib.parse import parse_qs, urlsplit
 import websocket
 from capture import Capture
 from policy import baseline, prompts
+from prompt_selection import PromptSelection
 
 
-def choose(turn: dict, generator) -> tuple[dict, str]:
+def choose(turn: dict, generator, selection: PromptSelection) -> tuple[dict, str]:
     view = turn["view"]
-    system, user = prompts(view, os.environ.get("PLAYER_PROMPT", ""))
+    system, user = prompts(selection, view, os.environ.get("PLAYER_PROMPT", ""))
     if generator:
         completion = generator(
             [
@@ -48,6 +49,7 @@ def main() -> None:
     socket = websocket.create_connection(url, timeout=60)
     socket.settimeout(None)
     pending: dict[int, tuple[dict, dict, str]] = {}
+    episode_selection: PromptSelection | None = None
     while True:
         opcode, data = socket.recv_data(control_frame=True)
         if opcode == websocket.ABNF.OPCODE_CLOSE:
@@ -57,7 +59,11 @@ def main() -> None:
         frame = json.loads(data)
         kind = frame["type"]
         if kind == "turn":
-            action, source = choose(frame, generator)
+            selection = PromptSelection.model_validate(frame["prompt_configuration"])
+            if episode_selection is not None and selection != episode_selection:
+                raise ValueError("prompt selection changed during episode")
+            episode_selection = selection
+            action, source = choose(frame, generator, selection)
             pending[frame["tick"]] = (frame, action, source)
             socket.send(
                 json.dumps(
@@ -75,9 +81,18 @@ def main() -> None:
                 raise RuntimeError(f"Lighthouse rejected tick {frame['tick']}")
             if artifact:
                 system, user = prompts(
-                    turn["view"], os.environ.get("PLAYER_PROMPT", "")
+                    PromptSelection.model_validate(turn["prompt_configuration"]),
+                    turn["view"],
+                    os.environ.get("PLAYER_PROMPT", ""),
                 )
-                artifact.record(system, user, action, source, frame["tick"])
+                artifact.record(
+                    system,
+                    user,
+                    action,
+                    source,
+                    frame["tick"],
+                    PromptSelection.model_validate(turn["prompt_configuration"]),
+                )
         elif kind == "final":
             if pending:
                 raise RuntimeError("Lighthouse ended with unacknowledged decisions")

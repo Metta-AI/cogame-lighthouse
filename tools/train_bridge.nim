@@ -4,6 +4,9 @@ import std/[hashes, json, os, strutils]
 import lighthouse/[sim, rules, player_policy]
 
 var
+  selection: PromptSelection
+  languageMode: bool
+  decisions: array[Seats, Decision]
   game: Sim
   cursor: int
   decisionId: int
@@ -13,10 +16,10 @@ var
 
 proc currentDecision(): JsonNode =
   let seat = game.pendingSeats()[cursor]
-  let prompts = promptsFromView(game.seatDecisionView(seat), "")
+  let prompts = promptsFromView(selection, game.seatDecisionView(seat), "")
   let system = prompts.system
   let user = prompts.user
-  %*{"kind": "decision", "game": "lighthouse",
+  result = %*{"kind": "decision", "game": "lighthouse",
     "decision_id": decisionId, "seat": seat, "engine_seat": seat,
     "turn": game.tick,
     "semantic_view": {"system": system, "user": user},
@@ -28,8 +31,21 @@ proc currentDecision(): JsonNode =
       "choice": {"type": "integer", "minimum": 0, "maximum": 1}},
       "required": ["choice"]}, "typed_question": newJNull()}
 
+  result["semantic_view"]["prompt_template"] = selection.promptMetadata(system, user)
+  if languageMode:
+    result["inference_mode"] = %"text_action"
+    result["action_schema"] = (if seat == KeeperSeat:
+      %*{"type": "object", "required": ["transmit", "message"],
+        "properties": {"transmit": {"type": "boolean"}, "message": {"type": "string"}, "notes": {"type": "string"}}}
+      else: %*{"type": "object", "required": ["move"],
+        "properties": {"move": {"type": "string"}, "notes": {"type": "string"}}})
+
 proc reset(command: JsonNode): JsonNode =
   doAssert command["players"].getInt() == Seats
+  selection = promptSelection(command)
+  if command.hasKey("split") and command["split"].getStr() == "train":
+    doAssert selection.selectedVariant notin {pvHeldoutBriefing, pvHeldoutReference},
+      "held-out wording is evaluation only"
   let manifest = parseFile(manifestPath)
   var variantConfig = newJNull()
   for entry in manifest["variants"]:
@@ -90,11 +106,17 @@ proc encode(): JsonNode =
 proc step(command: JsonNode): JsonNode =
   if command["decision_id"].getInt() != decisionId:
     return %*{"kind": "rejected", "reason": "stale decision"}
-  let action = parseJson(command["response"].getStr())
-  let choice = action["choice"].getInt()
-  doAssert choice in 0 .. 1
   let seats = game.pendingSeats()
-  choices[seats[cursor]] = choice
+  let seat = seats[cursor]
+  var action: JsonNode
+  if languageMode:
+    decisions[seat] = parseReply(seat, extractJsonObject(command["response"].getStr()))
+    action = decisionJson(seat, decisions[seat])
+  else:
+    action = parseJson(command["response"].getStr())
+    let choice = action["choice"].getInt()
+    doAssert choice in 0 .. 1
+    choices[seat] = choice
   inc decisionId
   inc cursor
   if cursor == seats.len:
@@ -105,8 +127,8 @@ proc step(command: JsonNode): JsonNode =
       notes: array[Seats, string]
       scripted: array[Seats, bool]
     for seat in seats:
-      var decision = scriptedAction(game, seat, skAuto)
-      if choices[seat] == 1:
+      var decision = (if languageMode: decisions[seat] else: scriptedAction(game, seat, skAuto))
+      if not languageMode and choices[seat] == 1:
         if seat == KeeperSeat:
           decision.transmit = false
           decision.message = ""
@@ -135,17 +157,24 @@ proc step(command: JsonNode): JsonNode =
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len != 2:
-    quit("usage: lighthouse-train-bridge MANIFEST VARIANT", 1)
+  if args.len notin [2, 3]:
+    quit("usage: lighthouse-train-bridge MANIFEST VARIANT [--language]", 1)
   manifestPath = absolutePath(args[0])
   variant = args[1]
+  if args.len == 3:
+    doAssert args[2] == "--language"
+    languageMode = true
   doAssert variant in ["standard", "spring-tide"]
   for line in stdin.lines:
     let command = parseJson(line)
     let response = case command["kind"].getStr()
       of "reset": reset(command)
       of "encode": encode()
-      of "teacher": %*{"response": $(%*{"choice": 0})}
+      of "teacher":
+        let seat = game.pendingSeats()[cursor]
+        let teacher = decisionJson(seat, scriptedAction(game, seat, skAuto))
+        %*{"response": $(if languageMode: decisionJson(seat, parseReply(seat, teacher))
+          else: %*{"choice": 0})}
       of "step": step(command)
       else: raise newException(ValueError, "unknown command")
     stdout.writeLine($response)
