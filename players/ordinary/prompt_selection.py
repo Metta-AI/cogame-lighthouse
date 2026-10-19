@@ -1,6 +1,7 @@
 """The episode selection and wording bank shared with the native host."""
 
 import hashlib
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -27,7 +28,7 @@ TRAIN: tuple[Wording, ...] = (
 class PromptSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    bank: Literal["lighthouse-rules-v1"] = "lighthouse-rules-v1"
+    bank: Literal["lighthouse-rules-v1", "lighthouse-rules-v2"] = "lighthouse-rules-v2"
     variant: Wording = "canonical"
     selection: Variant = "canonical"
     seed: int = Field(default=0, ge=0)
@@ -49,3 +50,17 @@ class PromptSelection(BaseModel):
             "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
             "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
         }
+
+
+class PromptBank(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    version: Literal["lighthouse-rules-v2"]
+    roles: dict[Literal["keeper", "runner"], str]
+    briefings: dict[Wording, str]
+    reply: str
+
+
+BANK = PromptBank.model_validate_json(
+    Path(__file__).with_name("prompt_bank.json").read_text()
+)

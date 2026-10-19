@@ -6,7 +6,7 @@ import
   bitworld/runtime,
   curly,
   sim,
-  rules, prompts, evidence
+  rules, prompts
 export prompts
 
 const
@@ -126,33 +126,7 @@ proc operatorBlock(prompt: string): string =
     "rules; always reply in the requested format):\n" & prompt & "\n\n"
 
 proc systemPrompt*(selection: PromptSelection, sim: Sim, seat: int): string =
-  let me = sim.names[seat]
-  let common = """
-
-Rules:
-- The maze is a perfect maze: exactly one path between any two floor
-  tiles, no loops. The only gap in the outer wall is the EXIT on the top
-  row.
-- Three KEYS lie in the maze. When all of them have been picked up the
-  gate at the exit opens (a horn everyone hears) and runners standing on
-  the exit tile escape.
-- The TIDE rises from the bottom row upward and never recedes. It is a
-  function of one number, the CLOCK. Every tick the clock advances by 1,
-  and by 2 instead if the keeper transmitted that tick. Nobody may step
-  into water; a runner the water reaches drowns.
-- SCORE is a single team number shared by all four seats: 6 points for
-  the keys, 10 for every runner that escapes, and up to 6 more for
-  escaping with all three while the clock is still low. Higher is better.
-  Drowning simply earns nothing.
-- The keeper may transmit ONE short message per tick. It reaches all
-  three runners at the start of the NEXT tick. Runners have no channel at
-  all: not to the keeper, not to each other.
-- Your notes are private to you and fed back to you every tick.
-
-OUTPUT FORMAT: reply with ONLY one JSON object, nothing else - no
-analysis, no explanation, no markdown fences, no text before or after
-the object. Your reply must begin with the character { and end with }."""
-  selection.introduction(me, seat == KeeperSeat) & common
+  selection.renderPrompt(sim.names[seat], seat == KeeperSeat)
 
 proc floodCountdown(sim: Sim): tuple[silent, talking: int] =
   let rows = sim.tideRows()
@@ -452,22 +426,7 @@ proc choosePromptAction*(client: LlmClient, selection: PromptSelection, view: Js
   if client.transport == ltSidecar:
     request.headers["x-coworld-player-slot"] = $seat
   batch.post(request.url, request.headers, request.body, $seat)
-  let captureDirectory = getEnv("LIGHTHOUSE_CAPTURE_DIR")
-  let trace = captureDirectory / ("player-" & $seat & ".jsonl")
-  if captureDirectory.len > 0:
-    appendPrivate(trace, %*{"event_type": "request_sent", "visibility": "private",
-      "seat": seat, "tick": view["tick"], "view": view,
-      "request_body": request.body, "transport": $client.transport,
-      "prompt_template": selection.promptMetadata(prompts.system, prompts.user)})
   let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
-  if captureDirectory.len > 0:
-    appendPrivate(trace, %*{"event_type": "response_received", "visibility": "private",
-      "seat": seat, "tick": view["tick"], "response_body": responses[0].response.body,
-      "response_status": responses[0].response.code, "transport_error": responses[0].error})
   let answer = client.textOf(responses[0].response,
     responses[0].error, request.url)
-  result = parseReply(seat, extractJsonObject(answer))
-  if captureDirectory.len > 0:
-    appendPrivate(trace, %*{"event_type": "response_parsed", "visibility": "private",
-      "seat": seat, "tick": view["tick"], "response": answer,
-      "action": decisionJson(seat, result)})
+  parseReply(seat, extractJsonObject(answer))

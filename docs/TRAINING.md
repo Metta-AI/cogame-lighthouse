@@ -2,77 +2,49 @@
 
 ## Episode wording
 
+The shared `players/ordinary/prompt_bank.json` contains five training presentations
+and two evaluation-only presentations. Native and ordinary players use the same
+complete rules for maze geometry, keys, tide timing, team score, and communication.
+Role visibility, private notes, and action syntax stay fixed. Ordinary players now
+receive the scoring and maze rules that their shorter prompt previously omitted.
+
 Set `promptVariant` and `promptSeed` in game configuration or bridge resets.
-The `lighthouse-rules-v1` bank provides five training introductions: `canonical`,
-`plain`, `numbered`, `questions`, and `reordered`. `mixed` requires a nonnegative
-prompt seed and resolves modulo five once per episode, independently of maze randomness.
-Both native and ordinary Python players consume the game-owned selection and reject
-changes within an episode. Their existing prompt formats remain separate.
+`mixed` resolves once per episode without consuming simulation randomness.
+The `lighthouse-rules-v2` bank keeps native canonical text, including the correction
+that each transmission costs an extra tide tick, rather than each word.
+Deploy the game and players together; players reject a different bank or changed
+selection within an episode. Held-out presentations cannot enter training.
 
-Only the introduction varies. Shared role rules, private views, and reply schemas
-stay fixed. The native keeper description now correctly charges an extra tide tick
-per transmission; the previous text incorrectly charged each word. Other canonical
-prompt bytes remain unchanged.
+## Source exports
 
-`heldout-briefing` and `heldout-reference` are evaluation-only. Training resets and
-source exports reject them. Private metadata hashes the actual rendered messages.
-The bridge's `--language` mode accepts full role actions, including private notes;
-numeric observations and action choices are unchanged.
+```sh
+lighthouse-posttrain PRIVATE_OUTPUT 10 standard mixed 0
+```
 
-`LIGHTHOUSE_CAPTURE_DIR` enables private host and bundled-player JSONL evidence.
-The host records private observations, received frames, resolved actions, and applied
-events. The bundled player records actual request bodies, responses, parsed actions,
-and acknowledgements. Interrupted or rejected calls retain only evidence that occurred;
-provider authorization headers are excluded. These diagnostic traces are not automatically
-admitted to training.
+The original train/validation JSONL and manifest are retained. Teacher actions pass
+through the production parser and simulator with the exact private view and selected
+prompt. Every fifth seed is validation; mixed wordings cycle separately within each
+split so all five presentations appear in training. Families use `lighthouse-SEED`
+across game variants. Run from clean committed source for reproducible revision pins.
 
 ## Ordinary player collection
 
-Build `Dockerfile.ordinary-player` and seat it through the normal Coworld
-player socket. The default policy chooses the role-specific scripted action.
-`LIGHTHOUSE_ADAPTER_DIR` selects a trained adapter when the player image
-also packages its base model, PyTorch, Transformers, and PEFT. The keeper
-sends `transmit`, `message`, and `notes`; runners send `move` and `notes`.
-All actions pass through the game's existing parser and tick resolver.
-
-Set `LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` on the
-player to upload schema-2 accepted-decision archives. Local files have owner-only
-permissions. Also enable host evidence with `LIGHTHOUSE_CAPTURE_DIR`; keep its
-`host.jsonl` under each run's `private/` directory alongside config, results, and replay.
-Export at least ten complete seed families:
+Build `Dockerfile.ordinary-player` and use the normal player socket. The default
+policy is scripted; `LIGHTHOUSE_ADAPTER_DIR` selects an adapter when its model and
+training dependencies are installed. Set `LIGHTHOUSE_CAPTURE_TRAINING=1` and
+`LIGHTHOUSE_SOURCE_REVISION` to retain accepted decisions in ordinary artifacts.
+Captures include exact prompt hashes and use owner-only local permissions.
 
 ```sh
-python3 players/ordinary/export.py /tmp/lighthouse-candidates \
-  /tmp/lighthouse-run-{1..10} \
-  --source-revision <game-source-sha> --replay-verifier /tmp/lighthouse-replay
+python3 players/ordinary/export.py PRIVATE_OUTPUT RUN_DIRECTORY... \
+  --source-revision SOURCE_SHA
 ```
 
-The exporter verifies source identity, actual private views, prompt hashes, received
-frames, resolved actions, and complete replay events. It rejects held-out wording,
-deadline endings, and incomplete decision coverage. It emits private review-required
-candidates, not training splits. Canned decisions are teachers; adapter decisions
-have unknown origin because these archives do not retain model-generation evidence.
-The shared importer owns review, admission, and scenario-family splits. Older schema-1
-archives lack operator guidance and cannot qualify through this exporter; recollect
-those runs without modifying retained archives.
-
-The native source exporter plays at least ten complete episodes per certified variant.
-It records prompts built from each private view and scripted replies passed through
-the production parser. Decisions within a tick use the same simulator state, then
-the native simulator resolves them together. Every event and final score must
-rederive from the replay. Export requires clean, committed source.
-
-```sh
-nim c -d:release --path:src -o:/tmp/lighthouse-posttrain tools/export_posttrain.nim
-/tmp/lighthouse-posttrain /tmp/lighthouse-data 10 standard
-# Optional wording and independent prompt seed:
-/tmp/lighthouse-posttrain /tmp/lighthouse-plain 10 spring-tide plain 0
-```
-
-The output contains private canonical trajectories, per-episode replays, and a
-review-required manifest. The shared importer owns admission and dataset splits.
-All wording and game variants share `lighthouse-SEED` scenario families. Scripted
-source evidence does not establish hosted sampling parity or model quality.
+The original train/validation exporter accepts complete or tick-capped episodes.
+Stored version-one archives without prompt metadata and version-two archives remain
+readable. New metadata is verified, and held-out wording is rejected. Source and
+scenario families must match before training. These checks do not qualify model
+sampling evidence or establish improved learned robustness.
 
 ## Numeric reinforcement learning
 
@@ -86,8 +58,7 @@ replies and keeper messages.
 
 ```sh
 nim c -d:release --path:src -o:/tmp/lighthouse-train-bridge tools/train_bridge.nim
-nim c -d:release --path:src -o:/tmp/lighthouse-replay tools/check_replay.nim
-python3 tools/test_training.py /tmp/lighthouse-posttrain /tmp/lighthouse-train-bridge /tmp/lighthouse-replay
+python3 tools/test_training.py /tmp/lighthouse-posttrain /tmp/lighthouse-train-bridge
 ```
 
 From a Metta checkout with the Coworld training stack, pass absolute

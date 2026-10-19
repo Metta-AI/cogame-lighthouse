@@ -29,11 +29,9 @@ class Capture:
         source: str,
         tick: int,
         selection: PromptSelection,
-        guidance: str,
     ) -> None:
         self.rows.append(
             {
-                "guidance": guidance,
                 "prompt_template": selection.metadata(system, user),
                 "decision_id": len(self.rows),
                 "tick": tick,
@@ -55,7 +53,7 @@ class Capture:
                 "trajectory.json",
                 json.dumps(
                     {
-                        "schema_version": 2,
+                        "schema_version": 1,
                         "game": "lighthouse",
                         "slot": self.slot,
                         "backend": self.backend,

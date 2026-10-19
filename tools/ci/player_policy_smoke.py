@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -22,9 +23,8 @@ class ModelStub(BaseHTTPRequestHandler):
         slot = self.headers["X-Coworld-Player-Slot"]
         self.calls.append((self.path, slot))
         assert self.path == "/v1/messages"
-        payload = {
-            "content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]
-        }
+        assert "TEAM PAYOFF" in request["system"]
+        payload = {"content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]}
         data = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -52,6 +52,8 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="lighthouse-mixed-") as temp:
         work = Path(temp)
         config = {
+            "promptVariant": "mixed",
+            "promptSeed": 4,
             "seed": 7,
             "maxTicks": 6,
             "turnDelayMs": 0,
@@ -110,6 +112,13 @@ def main() -> None:
                 if seat < 2:
                     env["COWORLD_LLM_ENDPOINT"] = stub_url
                 if seat == 0:
+                    env["LIGHTHOUSE_CAPTURE_TRAINING"] = "1"
+                    env["LIGHTHOUSE_SOURCE_REVISION"] = subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], text=True
+                    ).strip()
+                    env["COWORLD_PLAYER_ARTIFACT_UPLOAD_URL"] = (
+                        work / "ordinary.zip"
+                    ).as_uri()
                     argv = [
                         sys.executable,
                         str(Path(__file__).parents[2] / "players/ordinary/player.py"),
@@ -131,6 +140,16 @@ def main() -> None:
             results = json.loads((work / "results.json").read_text())
             replay = json.loads((work / "replay.json").read_text())
             assert results["ticks"] == 6 and replay["events"]
+            with zipfile.ZipFile(work / "ordinary.zip") as archive:
+                capture = json.loads(archive.read("trajectory.json"))
+            assert capture["complete"] and capture["schema_version"] == 1
+            assert len(capture["decisions"]) == 6
+            assert all(
+                row["prompt_template"]["bank"] == "lighthouse-rules-v2"
+                and row["prompt_template"]["variant"] == "reordered"
+                for row in capture["decisions"]
+            )
+            assert (work / "ordinary.zip").stat().st_mode & 0o777 == 0o600
             game_text = (work / "game.log").read_text()
             assert "using scripted fallback" not in game_text
             prompt = [call for call in ModelStub.calls if call[0] == "/v1/messages"]

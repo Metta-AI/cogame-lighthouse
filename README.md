@@ -113,11 +113,12 @@ note's §Tests passes as written; none was weakened.
 ## Episode prompt variants
 
 Game configuration accepts `promptVariant` and an independent nonnegative `promptSeed`.
-Five training introductions and two evaluation-only introductions retain shared role
-rules and action schemas. `mixed` chooses one training introduction for the entire
+Five training presentations and two evaluation-only presentations vary complete
+rules while retaining role visibility and action schemas. `mixed` chooses one for the entire
 episode without consuming maze randomness. Native and ordinary players validate the
 game's `prompt_configuration` turn field. See [training](docs/TRAINING.md) for private
-provenance, review-required candidate exports, and held-out restrictions.
+provenance, train/validation exports, and held-out restrictions. The native and
+ordinary players share one rule bank; deploy game and players together.
 
 ## Field a policy
 

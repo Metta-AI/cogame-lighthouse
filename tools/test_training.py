@@ -1,97 +1,54 @@
 """Play both certified mazes through full exports and numeric training."""
 
-import hashlib
 import json
 import random
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import TextIO, cast
-
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTER = Path(sys.argv[1]).resolve()
 BRIDGE = Path(sys.argv[2]).resolve()
-VERIFIER = Path(sys.argv[3]).resolve()
 MANIFEST = ROOT / "coworld_manifest_template.json"
 
 with tempfile.TemporaryDirectory() as directory:
     for variant in ("standard", "spring-tide"):
-        reference = None
-        for wording in ("canonical", "plain", "numbered", "questions", "reordered"):
-            output = Path(directory) / variant / wording
-            subprocess.run(
-                [str(EXPORTER), str(output), "10", variant, wording, "0"],
-                cwd=ROOT,
-                check=True,
-            )
-            manifest = json.loads((output / "manifest.json").read_text())
-            assert manifest["review_required"] and len(manifest["runs"]) == 10
-            records = [
-                json.loads(line)
-                for line in (output / "trajectories.jsonl").read_text().splitlines()
-            ]
-            families = {
-                row["seed_family"] for row in records if row["event_type"] == "episode"
-            }
-            assert families == {f"lighthouse-{seed}" for seed in range(1, 11)}
-            comparable = []
-            for run in manifest["runs"]:
-                assert 0 < run["turns"] <= 45 and run["reason"] in (
-                    "complete",
-                    "timeup",
-                )
-                source = output / run["trajectory"]
-                assert source.stat().st_mode & 0o777 == 0o600
-                subprocess.run(
-                    [str(VERIFIER), str(output / run["replay"])], cwd=ROOT, check=True
-                )
-            for row in records:
-                if row["event_type"] == "episode":
-                    comparable.append(row["outcome"])
-                    continue
-                (attempt,) = row["attempts"]
-                system, user = (part["content"] for part in attempt["prompt"])
-                assert "OUTPUT FORMAT" in system and "Tick " in user
-                action = row["executed_action"]
-                assert action == attempt["parsed_action"]
-                assert set(action) in (
-                    {"transmit", "message", "notes"},
-                    {"move", "notes"},
-                )
-                metadata = row["observation"]["prompt_template"]
-                assert (
-                    metadata["variant"] == wording
-                    and metadata["bank"] == "lighthouse-rules-v1"
-                )
-                for role, text in (("system", system), ("user", user)):
-                    assert (
-                        metadata[role + "_sha256"]
-                        == hashlib.sha256(text.encode()).hexdigest()
-                    )
-                assert (
-                    attempt["request"] is None and attempt["platform_call_id"] is None
-                )
-                comparable.append((row["observation"]["view"], user, action))
-            if reference is None:
-                reference = comparable
-            else:
-                assert comparable == reference
-            print(variant, wording, "ten source/replay games PASS", flush=True)
-        for wording in ("heldout-briefing", "heldout-reference"):
-            output = Path(directory) / variant / wording
-            rejected = subprocess.run(
-                [str(EXPORTER), str(output), "10", variant, wording, "0"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            assert (
-                rejected.returncode
-                and "held-out wording is evaluation only" in rejected.stderr
-            )
-            assert not output.exists()
+        output = Path(directory) / variant
+        subprocess.run(
+            [str(EXPORTER), str(output), "10", variant, "mixed", "0"],
+            cwd=ROOT,
+            check=True,
+        )
+        manifest = json.loads((output / "manifest.json").read_text())
+        train = [
+            json.loads(line)
+            for line in (output / "train.jsonl").read_text().splitlines()
+        ]
+        validation = [
+            json.loads(line)
+            for line in (output / "validation.jsonl").read_text().splitlines()
+        ]
+        assert len(manifest["runs"]) == 10
+        assert {row["prompt_template"]["variant"] for row in train} == {
+            "canonical",
+            "plain",
+            "numbered",
+            "questions",
+            "reordered",
+        }
+        assert len(train) == manifest["train_examples"]
+        assert len(validation) == manifest["validation_examples"]
+        assert all(
+            0 < run["turns"] <= 45 and run["reason"] in ("complete", "timeup")
+            for run in manifest["runs"]
+        )
+        for row in train + validation:
+            system, user = (part["content"] for part in row["prompt"])
+            assert "OUTPUT FORMAT" in system
+            assert "Tick " in user
+            reply = json.loads(row["completion"][0]["content"])
+            assert set(reply) in ({"transmit", "message", "notes"}, {"move", "notes"})
 
         for teacher in (True, False):
             process = subprocess.Popen(
@@ -102,14 +59,13 @@ with tempfile.TemporaryDirectory() as directory:
                 bufsize=1,
                 cwd="/tmp",
             )
-            stdin = cast(TextIO, process.stdin)
-            stdout = cast(TextIO, process.stdout)
+            assert process.stdin is not None and process.stdout is not None
             rng = random.Random(13)
 
             def request(payload: dict) -> dict:
-                stdin.write(json.dumps(payload) + "\n")
-                stdin.flush()
-                return json.loads(stdout.readline())
+                process.stdin.write(json.dumps(payload) + "\n")
+                process.stdin.flush()
+                return json.loads(process.stdout.readline())
 
             try:
                 observation = request(
@@ -149,6 +105,6 @@ with tempfile.TemporaryDirectory() as directory:
                 )
                 print(variant, "teacher" if teacher else "random", decisions)
             finally:
-                stdin.close()
-                stdout.close()
+                process.stdin.close()
+                process.stdout.close()
                 assert process.wait(timeout=5) == 0

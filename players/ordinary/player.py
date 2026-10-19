@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 import websocket
 from capture import Capture
 from policy import baseline, prompts
-from prompt_selection import PromptSelection
+from prompt_selection import BANK, PromptSelection
 
 
 def choose(turn: dict, generator, selection: PromptSelection) -> tuple[dict, str]:
@@ -60,6 +60,8 @@ def main() -> None:
         kind = frame["type"]
         if kind == "turn":
             selection = PromptSelection.model_validate(frame["prompt_configuration"])
+            if selection.bank != BANK.version:
+                raise ValueError("game and player prompt banks differ")
             if episode_selection is not None and selection != episode_selection:
                 raise ValueError("prompt selection changed during episode")
             episode_selection = selection
@@ -92,7 +94,6 @@ def main() -> None:
                     source,
                     frame["tick"],
                     PromptSelection.model_validate(turn["prompt_configuration"]),
-                    os.environ.get("PLAYER_PROMPT", ""),
                 )
         elif kind == "final":
             if pending:

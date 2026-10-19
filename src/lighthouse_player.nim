@@ -9,7 +9,7 @@
 import
   std/[json, options, os, strutils],
   whisky,
-  lighthouse/[rules, player_policy, evidence]
+  lighthouse/[rules, player_policy]
 
 const DefaultPrompt = """
 As KEEPER: you are the only one who can see. Spend ticks on words only
@@ -46,8 +46,6 @@ when isMainModule:
 
   echo "lighthouse player: connecting to game"
   let socket = newWebSocket(url)
-  let captureDirectory = getEnv("LIGHTHOUSE_CAPTURE_DIR")
-  var trace = ""
   var slot = -1
   var episodeSelection = none(PromptSelection)
 
@@ -63,11 +61,6 @@ when isMainModule:
     case payload{"type"}.getStr()
     of "welcome":
       slot = payload["slot"].getInt()
-      if captureDirectory.len > 0:
-        trace = captureDirectory / ("player-" & $slot & ".jsonl")
-        writePrivate(trace, $(%*{"event_type": "player_started", "visibility": "private",
-          "seat": slot, "source_revision": LighthouseSourceRevision,
-          "source_dirty": LighthouseSourceDirty}) & "\n")
       echo "lighthouse player: seated at slot ", slot,
         " as ", payload["name"].getStr(),
         " (", payload["role"].getStr(), ")"
@@ -84,27 +77,16 @@ when isMainModule:
       let decision =
         if fallback: scriptedActionFromView(view)
         else: choosePromptAction(client, selection, view, prompt, slot)
-      if captureDirectory.len > 0:
-        appendPrivate(trace, %*{"event_type": "decision_sent", "visibility": "private",
-          "seat": slot, "tick": payload["tick"], "view": view,
-          "prompt_selection": selection.selectionMetadata(), "scripted": fallback,
-          "action": decisionJson(slot, decision)})
       socket.send($ %*{
         "type": "decision", "tick": payload["tick"],
         "source": (if fallback: "scripted" else: "player"),
         "action": decisionJson(slot, decision)
       })
     of "decision_result":
-      if captureDirectory.len > 0:
-        appendPrivate(trace, %*{"event_type": "decision_result", "visibility": "private",
-          "seat": slot, "tick": payload["tick"], "accepted": payload["accepted"]})
       if not payload["accepted"].getBool():
         raise newException(ValueError,
           "game rejected player action on tick " & $payload["tick"].getInt())
     of "final":
-      if captureDirectory.len > 0:
-        appendPrivate(trace, %*{"event_type": "player_completed", "visibility": "private",
-          "seat": slot, "result": payload})
       echo "lighthouse player: final scores ", payload{"scores"}
       break
     else:
