@@ -74,3 +74,6 @@ and 18.50. These bounded runs verify execution, not stronger league play.
 
 Held-out bridge wordings require an explicit `evaluation`, `validation`, or `test`
 split. Omitted, training, and unrecognized splits reject them.
+
+Exported episode IDs include the selected wording and prompt seed, so matched
+wording collections remain distinct. The gameplay seed still groups related scenarios.
