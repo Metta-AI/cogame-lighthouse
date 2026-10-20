@@ -43,7 +43,10 @@ python3 players/ordinary/export.py PRIVATE_OUTPUT RUN_DIRECTORY... \
 The original train/validation exporter accepts complete or tick-capped episodes.
 Stored version-one archives without prompt metadata and version-two archives remain
 readable. New metadata is verified, and held-out wording is rejected. Source and
-scenario families must match before training. These checks do not qualify model
+scenario families must match before training. Matched wording runs may share a
+seed and stay in the same split. Episode IDs include a hash of the complete
+capture; repeated captures are rejected, including stored versions without
+prompt metadata. These checks do not qualify model
 sampling evidence or establish improved learned robustness.
 
 ## Numeric reinforcement learning
