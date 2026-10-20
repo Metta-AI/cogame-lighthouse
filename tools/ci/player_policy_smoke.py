@@ -17,13 +17,18 @@ from typing import ClassVar
 
 class ModelStub(BaseHTTPRequestHandler):
     calls: ClassVar[list[tuple[str, str]]] = []
+    briefing: ClassVar[str] = json.loads(
+        (
+            Path(__file__).resolve().parents[2] / "players/ordinary/prompt_bank.json"
+        ).read_text()
+    )["briefings"]["reordered"]
 
     def do_POST(self) -> None:
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         slot = self.headers["X-Coworld-Player-Slot"]
         self.calls.append((self.path, slot))
         assert self.path == "/v1/messages"
-        assert "TEAM PAYOFF" in request["system"]
+        assert self.briefing in request["system"]
         payload = {"content": [{"type": "text", "text": '{"move":"WAIT","notes":""}'}]}
         data = json.dumps(payload).encode()
         self.send_response(200)
