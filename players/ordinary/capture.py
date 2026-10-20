@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from prompt_selection import PromptSelection
+
 
 class Capture:
     def __init__(self, slot: int, backend: str) -> None:
@@ -20,10 +22,17 @@ class Capture:
         self.rows: list[dict] = []
 
     def record(
-        self, system: str, user: str, action: dict, source: str, tick: int
+        self,
+        system: str,
+        user: str,
+        action: dict,
+        source: str,
+        tick: int,
+        selection: PromptSelection,
     ) -> None:
         self.rows.append(
             {
+                "prompt_template": selection.metadata(system, user),
                 "decision_id": len(self.rows),
                 "tick": tick,
                 "source": source,
@@ -61,7 +70,10 @@ class Capture:
         if url.scheme == "file":
             target = Path(unquote(url.path))
             pending = target.with_name(target.name + ".tmp")
-            pending.write_bytes(data)
+            with os.fdopen(
+                os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb"
+            ) as destination:
+                destination.write(data)
             os.replace(pending, target)
         else:
             request = urllib.request.Request(

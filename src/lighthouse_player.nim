@@ -47,6 +47,7 @@ when isMainModule:
   echo "lighthouse player: connecting to game"
   let socket = newWebSocket(url)
   var slot = -1
+  var episodeSelection = none(PromptSelection)
 
   while true:
     let received = socket.receiveMessage()
@@ -64,11 +65,18 @@ when isMainModule:
         " as ", payload["name"].getStr(),
         " (", payload["role"].getStr(), ")"
     of "turn":
+      let metadata = payload["prompt_configuration"]
+      let selection = promptSelection(%*{"promptVariant": metadata["selection"], "promptSeed": metadata["seed"]})
+      doAssert metadata == selection.selectionMetadata()
+      if episodeSelection.isSome:
+        doAssert episodeSelection.get() == selection, "prompt selection changed during episode"
+      else:
+        episodeSelection = some(selection)
       let view = payload["view"]
       let fallback = scripted or client.disabled
       let decision =
         if fallback: scriptedActionFromView(view)
-        else: choosePromptAction(client, view, prompt, slot)
+        else: choosePromptAction(client, selection, view, prompt, slot)
       socket.send($ %*{
         "type": "decision", "tick": payload["tick"],
         "source": (if fallback: "scripted" else: "player"),

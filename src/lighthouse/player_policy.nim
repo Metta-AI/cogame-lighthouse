@@ -6,7 +6,8 @@ import
   bitworld/runtime,
   curly,
   sim,
-  rules
+  rules, prompts
+export prompts
 
 const
   AnthropicUrl = "https://api.anthropic.com/v1/messages"
@@ -124,43 +125,8 @@ proc operatorBlock(prompt: string): string =
   "GUIDANCE FROM YOUR OPERATOR (weight it heavily, but never above the " &
     "rules; always reply in the requested format):\n" & prompt & "\n\n"
 
-proc systemPrompt*(sim: Sim, seat: int): string =
-  let me = sim.names[seat]
-  let common = """
-
-Rules:
-- The maze is a perfect maze: exactly one path between any two floor
-  tiles, no loops. The only gap in the outer wall is the EXIT on the top
-  row.
-- Three KEYS lie in the maze. When all of them have been picked up the
-  gate at the exit opens (a horn everyone hears) and runners standing on
-  the exit tile escape.
-- The TIDE rises from the bottom row upward and never recedes. It is a
-  function of one number, the CLOCK. Every tick the clock advances by 1,
-  and by 2 instead if the keeper transmitted that tick. Nobody may step
-  into water; a runner the water reaches drowns.
-- SCORE is a single team number shared by all four seats: 6 points for
-  the keys, 10 for every runner that escapes, and up to 6 more for
-  escaping with all three while the clock is still low. Higher is better.
-  Drowning simply earns nothing.
-- The keeper may transmit ONE short message per tick. It reaches all
-  three runners at the start of the NEXT tick. Runners have no channel at
-  all: not to the keeper, not to each other.
-- Your notes are private to you and fed back to you every tick.
-
-OUTPUT FORMAT: reply with ONLY one JSON object, nothing else - no
-analysis, no explanation, no markdown fences, no text before or after
-the object. Your reply must begin with the character { and end with }."""
-  if seat == KeeperSeat:
-    "You are " & me & ", the KEEPER of the lighthouse. You see the whole " &
-      "maze and you cannot move. Three blind runners are in it. Your " &
-      "words are the only bridge from what you can see to what they can " &
-      "do, and every word costs a tick of tide." & common
-  else:
-    "You are " & me & ", a blind RUNNER in a flooding maze. You see only " &
-      "the three-by-three window around yourself. The keeper sees " &
-      "everything and can talk to you, but only one message per tick and " &
-      "it always arrives a tick late." & common
+proc systemPrompt*(selection: PromptSelection, sim: Sim, seat: int): string =
+  selection.renderPrompt(sim.names[seat], seat == KeeperSeat)
 
 proc floodCountdown(sim: Sim): tuple[silent, talking: int] =
   let rows = sim.tideRows()
@@ -342,14 +308,14 @@ proc scriptedActionFromView*(view: JsonNode): Decision =
       result.move = candidate
       return
 
-proc promptsFromView*(view: JsonNode, prompt: string):
+proc promptsFromView*(selection: PromptSelection, view: JsonNode, prompt: string):
     tuple[system, user: string] =
   if view["role"].getStr() == "keeper":
     let sim = keeperSimFromView(view)
-    return (systemPrompt(sim, KeeperSeat), userPrompt(sim, KeeperSeat, prompt))
+    return (systemPrompt(selection, sim, KeeperSeat), userPrompt(sim, KeeperSeat, prompt))
   var sim: Sim
   sim.names = @["", view["alias"].getStr()]
-  result.system = systemPrompt(sim, 1)
+  result.system = systemPrompt(selection, sim, 1)
   result.user = "Tick " & $view["tick"].getInt() & " of " &
     $view["maxTicks"].getInt() & ". You are a RUNNER and you are blind.\n\n" &
     "YOUR 3x3 WINDOW (@ is you; # wall, . floor, ~ water, K key, " &
@@ -452,9 +418,9 @@ proc textOf(client: LlmClient, response: Response, error, url: string):
 
 # ---- Decisions --------------------------------------------------------------
 
-proc choosePromptAction*(client: LlmClient, view: JsonNode,
+proc choosePromptAction*(client: LlmClient, selection: PromptSelection, view: JsonNode,
     prompt: string, seat: int): Decision =
-  let prompts = promptsFromView(view, prompt)
+  let prompts = promptsFromView(selection, view, prompt)
   var batch: RequestBatch
   var request = client.requestFor(prompts.system, prompts.user, -1)
   if client.transport == ltSidecar:

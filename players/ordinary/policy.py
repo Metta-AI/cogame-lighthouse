@@ -1,21 +1,22 @@
 """Player-side Lighthouse prompts and candidate actions from a private view."""
 
+from __future__ import annotations
+
 import json
 import re
 from collections import deque
+
+from prompt_selection import BANK, PromptSelection
 
 DIRECTIONS = ("N", "E", "S", "W")
 DELTAS = {"N": (0, -1), "E": (1, 0), "S": (0, 1), "W": (-1, 0)}
 
 
-def prompts(view: dict, guidance: str) -> tuple[str, str]:
+def prompts(selection: PromptSelection, view: dict, guidance: str) -> tuple[str, str]:
     system = (
-        f"You are {view['alias']}, the {view['role']} in Lighthouse. "
-        "The keeper sees the maze; runners see only their own 3x3 window. "
-        "Collect all keys and reach the exit before the rising tide. "
-        "A keeper transmission arrives next tick and doubles the tide clock "
-        "advance for this tick. Runners cannot talk. Never infer hidden state "
-        "beyond your private observation. Reply with one JSON action only."
+        BANK.roles[view["role"]].replace("<ALIAS>", view["alias"])
+        + BANK.briefings[selection.variant]
+        + BANK.reply
     )
     shape = (
         '{"transmit": true, "message": "Alias N; Alias E", "notes": ""}'

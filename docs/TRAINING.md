@@ -1,50 +1,53 @@
 # Lighthouse training
 
+## Episode wording
+
+The shared `players/ordinary/prompt_bank.json` contains five training presentations
+and two evaluation-only presentations. Native and ordinary players use the same
+complete rules for maze geometry, keys, tide timing, team score, and communication.
+Role visibility, private notes, and action syntax stay fixed. Ordinary players now
+receive the scoring and maze rules that their shorter prompt previously omitted.
+
+Set `promptVariant` and `promptSeed` in game configuration or bridge resets.
+`mixed` resolves once per episode without consuming simulation randomness.
+The `lighthouse-rules-v3` bank keeps native canonical text, including the correction
+that each transmission costs an extra tide tick, rather than each word.
+Deploy the game and players together; players reject a different bank or changed
+selection within an episode. Held-out presentations cannot enter training.
+
+## Source exports
+
+```sh
+lighthouse-posttrain PRIVATE_OUTPUT 10 standard mixed 0
+```
+
+The original train/validation JSONL and manifest are retained. Teacher actions pass
+through the production parser and simulator with the exact private view and selected
+prompt. Every fifth seed is validation; mixed wordings cycle separately within each
+split so all five presentations appear in training. Families use `lighthouse-SEED`
+across game variants. Run from clean committed source for reproducible revision pins.
+
 ## Ordinary player collection
 
-Build `Dockerfile.ordinary-player` and seat it through the normal Coworld
-player socket. The default policy chooses the role-specific scripted action.
-`LIGHTHOUSE_ADAPTER_DIR` selects a trained adapter when the player image
-also packages its base model, PyTorch, Transformers, and PEFT. The keeper
-sends `transmit`, `message`, and `notes`; runners send `move` and `notes`.
-All actions pass through the game's existing parser and tick resolver.
-
-Set `LIGHTHOUSE_CAPTURE_TRAINING=1` and `LIGHTHOUSE_SOURCE_REVISION` on the
-player to upload accepted decisions. Export at least two complete seed runs:
+Build `Dockerfile.ordinary-player` and use the normal player socket. The default
+policy is scripted; `LIGHTHOUSE_ADAPTER_DIR` selects an adapter when its model and
+training dependencies are installed. Set `LIGHTHOUSE_CAPTURE_TRAINING=1` and
+`LIGHTHOUSE_SOURCE_REVISION` to retain accepted decisions in ordinary artifacts.
+Captures include exact prompt hashes and use owner-only local permissions.
 
 ```sh
-python3 players/ordinary/export.py /tmp/lighthouse-dataset \
-  /tmp/lighthouse-run-14 /tmp/lighthouse-run-15 \
-  --source-revision <game-source-sha> --source canned
+python3 players/ordinary/export.py PRIVATE_OUTPUT RUN_DIRECTORY... \
+  --source-revision SOURCE_SHA
 ```
 
-The exporter splits by whole seed, rejects deadline endings and mismatched
-source revisions, and accepts the game's `complete` and `timeup` endings.
-The output uses `lighthouse-reply-v1`, matching the native exporter below.
-
-The exporter plays ten complete native episodes per certified variant.
-It records the bundled player's system and user prompts built from each
-private view, plus replies accepted by the production parser. Decisions within a tick use the same
-simulator state, then the native simulator resolves them together. Train
-and validation sets split complete episodes by seed.
-
-```sh
-nim c -d:release --path:src -o:/tmp/lighthouse-posttrain tools/export_posttrain.nim
-/tmp/lighthouse-posttrain /tmp/lighthouse-data 10 standard
-```
-
-The other certified variant is `spring-tide`. The output has
-`train.jsonl`, `validation.jsonl`, and a manifest with source revision,
-seeds, ticks, scores, and row counts. Ten matches yielded 976/221
-standard and 797/214 spring-tide train/validation decisions.
-
-From a Metta checkout with the post-training package installed:
-
-```sh
-uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
-  --dataset /tmp/lighthouse-data --output /tmp/lighthouse-adapter \
-  --model Qwen/Qwen3-0.6B --max-steps 100 --max-length 4096
-```
+The original train/validation exporter accepts complete or tick-capped episodes.
+Stored version-one archives without prompt metadata and version-two archives remain
+readable. New metadata is verified, and held-out wording is rejected. Source and
+scenario families must match before training. Matched wording runs may share a
+seed and stay in the same split. Episode IDs include a hash of the complete
+capture; repeated captures are rejected, including stored versions without
+prompt metadata. These checks do not qualify model
+sampling evidence or establish improved learned robustness.
 
 ## Numeric reinforcement learning
 
@@ -71,3 +74,13 @@ evaluation. Native PufferLib trained 4,096 CUDA timesteps per variant in
 Slurm job 9054, then reloaded each checkpoint for four games on each of
 seeds 101 and 102. Standard scored 28.91 and 18.47; spring-tide scored 12.50
 and 18.50. These bounded runs verify execution, not stronger league play.
+
+Held-out bridge wordings require an explicit `evaluation`, `validation`, or `test`
+split. Omitted, training, and unrecognized splits reject them.
+
+Exported episode IDs include requested selection, resolved wording, and prompt seed, so matched
+wording collections remain distinct. The gameplay seed still groups related scenarios.
+
+Version three gives numbered, question-led, reordered, and both held-out briefings
+independent rule phrasing. Canonical and plain text remain unchanged. Historical
+version-one and version-two captures remain readable with their recorded hashes.

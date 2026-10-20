@@ -5,11 +5,14 @@ import lighthouse/[sim, rules, player_policy]
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len != 3:
-    quit("usage: lighthouse-posttrain OUTPUT EPISODES VARIANT", 1)
+  if args.len notin [3, 5]:
+    quit("usage: lighthouse-posttrain OUTPUT EPISODES VARIANT [PROMPT_VARIANT PROMPT_SEED]", 1)
   let output = args[0]
   let episodes = parseInt(args[1])
   let variant = args[2]
+  let configured = promptSelection(if args.len == 5:
+    %*{"promptVariant": args[3], "promptSeed": parseInt(args[4])} else: newJObject())
+  doAssert configured.selectedVariant notin {pvHeldoutBriefing, pvHeldoutReference}, "held-out wording is evaluation only"
   if episodes < 10: quit("at least ten games are required", 1)
   if dirExists(output) or fileExists(output):
     quit("output already exists: " & output, 1)
@@ -25,7 +28,13 @@ when isMainModule:
     trainRows: seq[string]
     validationRows: seq[string]
     runs = newJArray()
+    wordingCounts: array[2, int]
   for seed in 1 .. episodes:
+    var selection = configured
+    let split = ord(seed mod 5 == 0)
+    if selection.variant == pvMixed:
+      selection.seed += wordingCounts[split]
+      inc wordingCounts[split]
     variantConfig["seed"] = %seed
     var config = defaultGameConfig()
     config.update($variantConfig)
@@ -42,15 +51,17 @@ when isMainModule:
         scripted: array[Seats, bool]
       for seat in seats:
         let decision = scriptedAction(game, seat, skAuto)
-        let prompts = promptsFromView(game.seatDecisionView(seat), "")
+        let prompts = promptsFromView(selection, game.seatDecisionView(seat), "")
         let completion = decisionJson(seat, decision)
         let accepted = parseReply(seat, completion)
         doAssert accepted.move == decision.move
         doAssert accepted.transmit == decision.transmit
         doAssert accepted.message == (if decision.transmit: decision.message else: "")
         rows.add($(%*{
-          "episode_id": "lighthouse-" & variant & "-" & $seed,
-          "seed": "lighthouse-" & variant & "-" & $seed,
+          "episode_id": "lighthouse-" & variant & "-" & $seed & "-" &
+              $selection.variant & "-" & $selection.selectedVariant & "-" & $selection.seed,
+          "seed": "lighthouse-" & $seed,
+          "prompt_template": selection.promptMetadata(prompts.system, prompts.user),
           "decision_id": rows.len,
           "prompt": [
             {"role": "system", "content": prompts.system},

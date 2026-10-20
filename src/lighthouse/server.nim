@@ -1,3 +1,5 @@
+import lighthouse/prompts
+
 ## Lighthouse game server: implements the Coworld game contract.
 ##
 ## Endpoints:
@@ -35,6 +37,7 @@ const
 
 type
   GameState = object
+    selection: PromptSelection
     config: GameConfig
     sim: Sim
     pendingTick: int
@@ -318,6 +321,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
           if state.playerSockets.hasKey(seat):
             state.playerSockets[seat].send($ %*{
               "type": "turn",
+              "prompt_configuration": state.selection.selectionMetadata(),
               "tick": simCopy.tick,
               "view": simCopy.seatDecisionView(seat)
             })
@@ -588,6 +592,7 @@ proc runReplayServer*(runtimeConfig: RuntimeConfig) =
 proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   if config.tokens.len != config.players.len:
     raise newException(LighthouseError, "tokens and players must align")
+  state.selection = promptSelection(parseJson(runtimeConfig.config))
   state.config = config
   state.sim = initSim(config)
   state.pendingTick = -1

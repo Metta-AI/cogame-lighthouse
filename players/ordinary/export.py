@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import zipfile
 from pathlib import Path
+
+from prompt_selection import PromptSelection
 
 
 def export(
@@ -20,14 +23,11 @@ def export(
         raise ValueError("validation modulus must be at least two")
     splits: dict[str, list[str]] = {"train": [], "validation": []}
     episodes: list[dict] = []
-    seeds: set[int] = set()
+    episode_ids: set[str] = set()
     for run in runs:
         config = json.loads((run / "config.json").read_text())
         results = json.loads((run / "results.json").read_text())
         seed = config["seed"]
-        if seed in seeds:
-            raise ValueError(f"duplicate game seed {seed}")
-        seeds.add(seed)
         if results["reason"] not in ("complete", "timeup"):
             raise ValueError(f"incomplete game {run}")
         split = "validation" if seed % validation_modulus == 0 else "train"
@@ -35,9 +35,16 @@ def export(
         for artifact in sorted(run.glob("policy_artifact_*.zip")):
             slot = int(artifact.stem.removeprefix("policy_artifact_"))
             with zipfile.ZipFile(artifact) as archive:
-                trajectory = json.loads(archive.read("trajectory.json"))
+                content = archive.read("trajectory.json")
+                trajectory = json.loads(content)
+            episode_id = (
+                f"lighthouse-{seed}-seat-{slot}-{hashlib.sha256(content).hexdigest()}"
+            )
+            if episode_id in episode_ids:
+                raise ValueError(f"duplicate training capture {artifact}")
+            episode_ids.add(episode_id)
             if (
-                trajectory["schema_version"] != 1
+                trajectory["schema_version"] not in (1, 2)
                 or trajectory["game"] != "lighthouse"
                 or trajectory["slot"] != slot
                 or trajectory["source_revision"] != revision
@@ -47,10 +54,23 @@ def export(
             ):
                 raise ValueError(f"invalid training artifact {artifact}")
             for row in trajectory["decisions"]:
+                if "prompt_template" in row:
+                    metadata = row["prompt_template"]
+                    selection = PromptSelection.model_validate(
+                        {
+                            key: metadata[key]
+                            for key in ("bank", "variant", "selection", "seed")
+                        }
+                    )
+                    if selection.variant.startswith("heldout-"):
+                        raise ValueError("held-out wording cannot enter training")
+                    system, user = (message["content"] for message in row["prompt"])
+                    if selection.metadata(system, user) != metadata:
+                        raise ValueError("captured prompt hashes differ")
                 if row["source"] != source:
                     continue
                 example = {
-                    "episode_id": f"lighthouse-{seed}-seat-{slot}",
+                    "episode_id": episode_id,
                     "seed": f"lighthouse-{seed}",
                     "decision_id": row["decision_id"],
                     "prompt": row["prompt"],
@@ -58,6 +78,8 @@ def export(
                     "game": "lighthouse",
                     "action_schema_revision": "lighthouse-reply-v1",
                 }
+                if "prompt_template" in row:
+                    example["prompt_template"] = row["prompt_template"]
                 splits[split].append(json.dumps(example, ensure_ascii=False))
                 count += 1
         if count == 0:

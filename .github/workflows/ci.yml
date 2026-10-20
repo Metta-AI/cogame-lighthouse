@@ -176,11 +176,12 @@ jobs:
             -o:/tmp/lighthouse-train-bridge tools/train_bridge.nim
           python3 tools/test_training.py /tmp/lighthouse-posttrain \
             /tmp/lighthouse-train-bridge
-
-      - name: Compare ordinary-player baselines with native rules
-        run: python3 tools/test_policy_view.py
+          python3 tools/test_prompt_games.py /tmp/lighthouse-train-bridge
 
       - uses: astral-sh/setup-uv@v6
+
+      - name: Compare ordinary-player baselines with native rules
+        run: uv run --no-project --with pydantic==2.12.5 python tools/test_policy_view.py
 
       - name: Native mixed player episode
         run: |
@@ -188,7 +189,7 @@ jobs:
             -o:/tmp/lighthouse-game src/lighthouse.nim
           nim c --hints:off -d:release --path:src \
             -o:/tmp/lighthouse-player src/lighthouse_player.nim
-          uv run --no-project --with websocket-client==1.8.0 python \
+          uv run --no-project --with websocket-client==1.8.0 --with pydantic==2.12.5 python \
             tools/ci/player_policy_smoke.py /tmp/lighthouse-game \
             /tmp/lighthouse-player
 
