@@ -28,7 +28,9 @@ TRAIN: tuple[Wording, ...] = (
 class PromptSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    bank: Literal["lighthouse-rules-v1", "lighthouse-rules-v2"] = "lighthouse-rules-v2"
+    bank: Literal[
+        "lighthouse-rules-v1", "lighthouse-rules-v2", "lighthouse-rules-v3"
+    ] = "lighthouse-rules-v3"
     variant: Wording = "canonical"
     selection: Variant = "canonical"
     seed: int = Field(default=0, ge=0)
@@ -55,7 +57,7 @@ class PromptSelection(BaseModel):
 class PromptBank(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    version: Literal["lighthouse-rules-v2"]
+    version: Literal["lighthouse-rules-v3"]
     roles: dict[Literal["keeper", "runner"], str]
     briefings: dict[Wording, str]
     reply: str

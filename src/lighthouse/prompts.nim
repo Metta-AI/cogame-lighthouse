@@ -17,7 +17,7 @@ type
     seed*: int
 
 const
-  PromptBankVersion* = "lighthouse-rules-v2"
+  PromptBankVersion* = "lighthouse-rules-v3"
 
 proc promptSelection*(node: JsonNode): PromptSelection =
   if node.kind != JObject:

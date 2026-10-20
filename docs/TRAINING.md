@@ -10,7 +10,7 @@ receive the scoring and maze rules that their shorter prompt previously omitted.
 
 Set `promptVariant` and `promptSeed` in game configuration or bridge resets.
 `mixed` resolves once per episode without consuming simulation randomness.
-The `lighthouse-rules-v2` bank keeps native canonical text, including the correction
+The `lighthouse-rules-v3` bank keeps native canonical text, including the correction
 that each transmission costs an extra tide tick, rather than each word.
 Deploy the game and players together; players reject a different bank or changed
 selection within an episode. Held-out presentations cannot enter training.
@@ -77,3 +77,7 @@ split. Omitted, training, and unrecognized splits reject them.
 
 Exported episode IDs include the selected wording and prompt seed, so matched
 wording collections remain distinct. The gameplay seed still groups related scenarios.
+
+Version three gives numbered, question-led, reordered, and both held-out briefings
+independent rule phrasing. Canonical and plain text remain unchanged. Historical
+version-one and version-two captures remain readable with their recorded hashes.

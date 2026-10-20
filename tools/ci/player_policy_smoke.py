@@ -145,7 +145,7 @@ def main() -> None:
             assert capture["complete"] and capture["schema_version"] == 1
             assert len(capture["decisions"]) == 6
             assert all(
-                row["prompt_template"]["bank"] == "lighthouse-rules-v2"
+                row["prompt_template"]["bank"] == "lighthouse-rules-v3"
                 and row["prompt_template"]["variant"] == "reordered"
                 for row in capture["decisions"]
             )
