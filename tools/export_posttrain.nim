@@ -59,7 +59,7 @@ when isMainModule:
         doAssert accepted.message == (if decision.transmit: decision.message else: "")
         rows.add($(%*{
           "episode_id": "lighthouse-" & variant & "-" & $seed & "-" &
-              $selection.selectedVariant & "-" & $selection.seed,
+              $selection.variant & "-" & $selection.selectedVariant & "-" & $selection.seed,
           "seed": "lighthouse-" & $seed,
           "prompt_template": selection.promptMetadata(prompts.system, prompts.user),
           "decision_id": rows.len,
