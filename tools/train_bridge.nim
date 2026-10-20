@@ -43,9 +43,10 @@ proc currentDecision(): JsonNode =
 proc reset(command: JsonNode): JsonNode =
   doAssert command["players"].getInt() == Seats
   selection = promptSelection(command)
-  if command.hasKey("split") and command["split"].getStr() == "train":
-    doAssert selection.selectedVariant notin {pvHeldoutBriefing, pvHeldoutReference},
-      "held-out wording is evaluation only"
+  if selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+    doAssert command.hasKey("split") and
+      command["split"].getStr() in ["evaluation", "validation", "test"],
+      "held-out wording requires an explicit evaluation split"
   let manifest = parseFile(manifestPath)
   var variantConfig = newJNull()
   for entry in manifest["variants"]:

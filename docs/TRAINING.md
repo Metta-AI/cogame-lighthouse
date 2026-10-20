@@ -71,3 +71,6 @@ evaluation. Native PufferLib trained 4,096 CUDA timesteps per variant in
 Slurm job 9054, then reloaded each checkpoint for four games on each of
 seeds 101 and 102. Standard scored 28.91 and 18.47; spring-tide scored 12.50
 and 18.50. These bounded runs verify execution, not stronger league play.
+
+Held-out bridge wordings require an explicit `evaluation`, `validation`, or `test`
+split. Omitted, training, and unrecognized splits reject them.

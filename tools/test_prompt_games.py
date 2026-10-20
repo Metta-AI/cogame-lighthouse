@@ -114,7 +114,11 @@ def play(binary, variant, wording, seed, language, prompt_seed=0, original=False
 
 if __name__ == "__main__":
     binary = Path(sys.argv[1]).resolve()
-    for wording in WORDINGS[-2:]:
+    for wording, split in (
+        (wording, split)
+        for wording in WORDINGS[-2:]
+        for split in (None, "train", "typo")
+    ):
         rejected = subprocess.run(
             [
                 str(binary),
@@ -128,7 +132,7 @@ if __name__ == "__main__":
                     "players": 4,
                     "seed": 7,
                     "promptVariant": wording,
-                    "split": "train",
+                    **({"split": split} if split is not None else {}),
                 }
             )
             + "\n",
